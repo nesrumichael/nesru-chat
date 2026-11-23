@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1877f2" />
+  <meta name="description" content="Nesru Michael Social Network - Connect, Share, and Message in Real-Time. Founded by Nesru Michael." />
+  <title>Nesru Michael — Social Platform</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="icons/icon-192.svg" />
+  <link rel="stylesheet" href="styles.css" />
+  <!-- Supabase JS SDK (for Live Cloud Backend) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <!-- AUTH OVERLAY (Shown when logged out) -->
+  <div id="auth-screen" class="auth-screen">
+    <div class="auth-container">
+      <div class="auth-brand">
+        <div class="brand-logo-large">NM</div>
+        <h1>Nesru Michael</h1>
+        <p>Walitti dhufeenya hawaasaa, yaada qooddachuu fi ergaa battalaa — Platformii ammayyaa kan <strong>Nesru Michael</strong>'tiin hundeeffame.</p>
+        <div class="owner-badge">
+          <span>Founder &amp; Admin: <strong>Nesru Michael</strong></span>
+          <span>Email: nesrumichael@gmail.com | Tel: +251923502787</span>
+        </div>
+      </div>
+
+      <div class="auth-card">
+        <div class="auth-tabs">
+          <button id="tab-login" class="auth-tab active" onclick="switchAuthTab('login')">Login (Seeni)</button>
+          <button id="tab-signup" class="auth-tab" onclick="switchAuthTab('signup')">Sign Up (Galmaa'i)</button>
+        </div>
+
+        <form id="login-form" onsubmit="handleLogin(event)">
+          <div class="form-group">
+            <label>Email ykn Username</label>
+            <input type="text" id="login-email" placeholder="nesrumichael@gmail.com" required />
+          </div>
+          <div class="form-group">
+            <label>Password (Jecha Iccitii)</label>
+            <input type="password" id="login-password" placeholder="••••••••" required />
+          </div>
+          <button type="submit" class="btn-primary full-width">Seeni (Log In)</button>
+          <button type="button" class="btn-demo full-width" onclick="loginAsFounderDemo()">
+            ⚡ Akka Abbaa Appii (Nesru Michael) Seeni
+          </button>
+        </form>
+
+        <form id="signup-form" class="hidden" onsubmit="handleSignup(event)">
+          <div class="form-group">
+            <label>Maqaa Guutuu (Full Name)</label>
+            <input type="text" id="signup-name" placeholder="Fkn: Caalaa Bultii" required />
+          </div>
+          <div class="form-group">
+            <label>Username</label>
+            <input type="text" id="signup-username" placeholder="caalaa_b" required />
+          </div>
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="signup-email" placeholder="email@example.com" required />
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="signup-password" placeholder="Jecha iccitii filadhu" required />
+          </div>
+          <button type="submit" class="btn-success full-width">Herrega Haaraa Uumi (Sign Up)</button>
+        </form>
+
+        <div class="auth-footer-links">
+          <a href="#" onclick="openLegalModal('about')">About</a> •
+          <a href="#" onclick="openLegalModal('privacy')">Privacy Policy</a> •
+          <a href="#" onclick="openLegalModal('terms')">Terms</a> •
+          <a href="#" onclick="openLegalModal('standards')">Community Standards</a> •
+          <a href="#" onclick="openLegalModal('contact')">Contact</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN APPLICATION (Shown when logged in) -->
+  <div id="app-shell" class="hidden">
+    <!-- 1. TOP NAVIGATION BAR -->
+    <header class="navbar">
+      <div class="nav-left">
+        <div class="logo-circle" onclick="navigateTo('feed')">NM</div>
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="global-search" placeholder="Barbaadi: namoota, maxxansaalee, garee..." oninput="handleSearch(this.value)" />
+        </div>
+      </div>
+
+      <nav class="nav-center">
+        <button class="nav-tab active" data-view="feed" onclick="navigateTo('feed')" title="Home / Feed">
+          <span class="nav-icon">🏠</span>
+          <span class="nav-label">Home</span>
+        </button>
+        <button class="nav-tab" data-view="reels" onclick="navigateTo('reels')" title="Videos / Reels">
+          <span class="nav-icon">🎬</span>
+          <span class="nav-label">Reels</span>
+        </button>
+        <button class="nav-tab" data-view="marketplace" onclick="navigateTo('marketplace')" title="Marketplace">
+          <span class="nav-icon">🏪</span>
+          <span class="nav-label">Market</span>
+        </button>
+        <button class="nav-tab" data-view="groups" onclick="navigateTo('groups')" title="Groups & Pages">
+          <span class="nav-icon">👥</span>
+          <span class="nav-label">Groups</span>
+        </button>
+        <button class="nav-tab" data-view="friends" onclick="navigateTo('friends')" title="Friends">
+          <span class="nav-icon">🤝</span>
+          <span class="nav-label">Friends</span>
+        </button>
+      </nav>
+
+      <div class="nav-right">
+        <button class="icon-btn" onclick="toggleMobileMenu()" title="Menu (☰)">☰</button>
+        <button class="icon-btn" onclick="toggleMessenger()" title="Messenger">
+          💬 <span id="msg-badge" class="badge">2</span>
+        </button>
+        <div class="notif-wrapper">
+          <button class="icon-btn" onclick="toggleNotifications()" title="Notifications">
+            🔔 <span id="notif-badge" class="badge">3</span>
+          </button>
+          <!-- Notifications Dropdown -->
+          <div id="notif-dropdown" class="dropdown-panel hidden">
+            <div class="dropdown-header">
+              <h4>Notifications (Beeksisaalee)</h4>
+              <button class="link-btn" onclick="markAllNotifsRead()">Hunda dubbiseera</button>
+            </div>
+            <div id="notif-list" class="dropdown-body"></div>
+          </div>
+        </div>
+        <div class="profile-menu-wrapper">
+          <button class="profile-pill" onclick="toggleProfileDropdown()">
+            <img id="nav-avatar" src="" alt="Avatar" />
+            <span id="nav-username">Nesru</span>
+          </button>
+          <div id="profile-dropdown" class="dropdown-panel hidden">
+            <div class="dropdown-user-info">
+              <strong id="drop-fullname">Nesru Michael</strong>
+              <small id="drop-email">nesrumichael@gmail.com</small>
+            </div>
+            <hr />
+            <button class="dropdown-item" onclick="navigateTo('profile')">👤 Profile Koo (My Profile)</button>
+            <button class="dropdown-item" onclick="navigateTo('saved')">🔖 Saved Posts</button>
+            <button class="dropdown-item" onclick="openLegalModal('about')">ℹ️ About &amp; Founder Info</button>
+            <button class="dropdown-item" onclick="openLegalModal('privacy')">🔒 Privacy Policy</button>
+            <button class="dropdown-item" onclick="openLegalModal('terms')">📜 Terms of Service</button>
+            <button class="dropdown-item" onclick="openLegalModal('standards')">⚖️ Community Standards</button>
+            <button class="dropdown-item" onclick="openLegalModal('contact')">📞 Contact / Support</button>
+            <hr />
+            <button class="dropdown-item danger" onclick="handleLogout()">🚪 Ba'i (Log Out)</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- 3-COLUMN LAYOUT -->
+    <div class="main-layout">
+      <!-- 2. LEFT SIDEBAR -->
+      <aside class="left-sidebar" id="left-sidebar">
+        <div class="sidebar-item user-card" onclick="navigateTo('profile')">
+          <img id="side-avatar" src="" alt="Profile" />
+          <div>
+            <strong id="side-fullname">Nesru Michael</strong>
+            <span class="verified-tag" id="founder-badge">✔ Founder &amp; Owner</span>
+          </div>
+        </div>
+
+        <div class="sidebar-menu">
+          <button class="sidebar-item" onclick="navigateTo('friends')"><span>🤝</span> Friends (Hiriyyoota)</button>
+          <button class="sidebar-item" onclick="navigateTo('saved')"><span>🔖</span> Saved (Kan Ol-kaa'aman)</button>
+          <button class="sidebar-item" onclick="navigateTo('memories')"><span>🕰️</span> Memories (Yaadannoo)</button>
+          <button class="sidebar-item" onclick="navigateTo('groups')"><span>👥</span> Groups (Gareewwan)</button>
+          <button class="sidebar-item" onclick="navigateTo('events')"><span>📅</span> Events (Taateewwan)</button>
+          <button class="sidebar-item" onclick="navigateTo('pages')"><span>🚩</span> Pages (Fuulota)</button>
+          <button class="sidebar-item" onclick="navigateTo('ads')"><span>📊</span> Ads Manager</button>
+        </div>
+
+        <hr />
+        <div class="sidebar-section-title">Legal &amp; Platform Info</div>
+        <div class="legal-links-compact">
+          <a href="#" onclick="openLegalModal('about')">About</a> ·
+          <a href="#" onclick="openLegalModal('contact')">Contact</a> ·
+          <a href="#" onclick="openLegalModal('privacy')">Privacy</a> ·
+          <a href="#" onclick="openLegalModal('terms')">Terms</a> ·
+          <a href="#" onclick="openLegalModal('standards')">Standards</a>
+        </div>
+        <p class="copyright-note">© 2026 Nesru Michael<br/>nesrumichael@gmail.com<br/>+251923502787</p>
+      </aside>
+
+      <!-- 3. MAIN FEED / CENTER CONTENT -->
+      <main class="center-feed">
+        <!-- View: HOME FEED -->
+        <section id="view-feed" class="view-section">
+          <!-- Stories Bar (24h) -->
+          <div class="stories-bar" id="stories-bar"></div>
+
+          <!-- Create Post Box -->
+          <div class="card create-post-card">
+            <div class="create-top">
+              <img id="composer-avatar" src="" alt="User" />
+              <textarea id="post-content" rows="2" placeholder="Maal yaadaa jirta, Nesru? Yaada, suuraa ykn linkii qooddadhu..."></textarea>
+            </div>
+            <div id="media-input-row" class="media-input-row hidden">
+              <input type="url" id="post-media-url" placeholder="Linkii Suuraa ykn Viidiyoo (https://...) galchi ykn filadhu" />
+              <select id="post-media-type">
+                <option value="image">Suuraa (Image)</option>
+                <option value="video">Viidiyoo (Video URL)</option>
+              </select>
+            </div>
+            <div class="create-bottom">
+              <div class="create-actions">
+                <button type="button" class="action-pill" onclick="toggleMediaInput()">🖼️ Suuraa / Viidiyoo</button>
+                <select id="post-privacy" class="privacy-select" title="Privacy">
+                  <option value="public">🌍 Public (Hundaaf)</option>
+                  <option value="friends">👥 Friends (Hiriyyootaaf)</option>
+                  <option value="only_me">🔒 Only Me (Ana qofaaf)</option>
+                </select>
+              </div>
+              <button type="button" class="btn-primary" onclick="createNewPost()">Maxxansi (Post)</button>
+            </div>
+          </div>
+
+          <!-- Feed Filter Tabs -->
+          <div class="feed-filters">
+            <button class="filter-chip active" onclick="filterFeed('all', this)">Hunda (All Feed)</button>
+            <button class="filter-chip" onclick="filterFeed('public', this)">🌍 Public</button>
+            <button class="filter-chip" onclick="filterFeed('friends', this)">👥 Friends</button>
+            <button class="filter-chip" onclick="filterFeed('mine', this)">👤 Maxxansa Koo</button>
+          </div>
+
+          <!-- Posts Stream -->
+          <div id="posts-stream"></div>
+        </section>
+
+        <!-- View: PROFILE -->
+        <section id="view-profile" class="view-section hidden">
+          <div class="card profile-header-card">
+            <div class="cover-photo"></div>
+            <div class="profile-details-row">
+              <img id="prof-avatar" class="prof-big-avatar" src="" alt="Profile" />
+              <div class="prof-meta">
+                <h2 id="prof-fullname">Nesru Michael <span class="verified-badge">✔ Owner</span></h2>
+                <p id="prof-bio">Founder &amp; Full-Stack Software Developer at Nesru Michael Platform.</p>
+                <small id="prof-contact-line">📧 nesrumichael@gmail.com | 📱 +251923502787</small>
+              </div>
+              <button class="btn-secondary" onclick="editProfileBio()">✏️ Profile Gulaali</button>
+            </div>
+          </div>
+          <div id="profile-posts-stream"></div>
+        </section>
+
+        <!-- View: FRIENDS / SOCIAL GRAPH -->
+        <section id="view-friends" class="view-section hidden">
+          <div class="card">
+            <h3>🤝 Social Graph — Hiriyyoota fi Gaaffii Hiriyyummaa</h3>
+            <p class="muted">Walitti dhufeenya fayyadamtootaa (Pending, Accepted, Suggested)</p>
+            <div id="friends-list-container" class="grid-cards"></div>
+          </div>
+        </section>
+
+        <!-- View: GROUPS & PAGES -->
+        <section id="view-groups" class="view-section hidden">
+          <div class="card">
+            <div class="section-header-row">
+              <h3>👥 Groups &amp; Pages</h3>
+              <button class="btn-primary" onclick="createNewGroupPrompt()">+ Garee Haaraa Uumi</button>
+            </div>
+            <div id="groups-list-container" class="grid-cards"></div>
+          </div>
+        </section>
+
+        <!-- View: REELS / VIDEOS -->
+        <section id="view-reels" class="view-section hidden">
+          <div class="card">
+            <h3>🎬 Videos &amp; Reels</h3>
+            <p class="muted">Viidiyoowwan gaggabaaboo fi barnootaa hawaasa irraa.</p>
+            <div id="reels-container" class="reels-grid"></div>
+          </div>
+        </section>
+
+        <!-- View: MARKETPLACE -->
+        <section id="view-marketplace" class="view-section hidden">
+          <div class="card">
+            <div class="section-header-row">
+              <h3>🏪 Nesru Marketplace</h3>
+              <button class="btn-primary" onclick="addMarketItemPrompt()">+ Meeshaa Gurgurtaaf Dhiyeessi</button>
+            </div>
+            <div id="market-container" class="grid-cards"></div>
+          </div>
+        </section>
+
+        <!-- View: SAVED / MEMORIES / EVENTS / PAGES / ADS -->
+        <section id="view-extra" class="view-section hidden">
+          <div class="card">
+            <h3 id="extra-view-title">Section</h3>
+            <div id="extra-view-body"></div>
+          </div>
+        </section>
+      </main>
+
+      <!-- 4. RIGHT SIDEBAR -->
+      <aside class="right-sidebar">
+        <!-- Sponsored / Founder Info -->
+        <div class="card widget-card">
+          <div class="widget-title">Sponsored &amp; Official</div>
+          <div class="sponsored-box" onclick="openLegalModal('about')">
+            <div class="sponsored-banner">NM</div>
+            <div>
+              <strong>Nesru Michael Official</strong>
+              <p>Platformii hawaasummaa fi teeknooloojii ammayyaa. Quunnamtii: +251923502787</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Birthdays & Events -->
+        <div class="card widget-card">
+          <div class="widget-title">🎂 Birthdays &amp; Events</div>
+          <p class="small-info">🎉 Har'a Guyyaa Dhalootaa <strong>Bontu Tadesse</strong> fi <strong>Obsa Gemechu</strong> ti!</p>
+          <p class="small-info">📅 <strong>Tech Meetup Ethiopia 2026</strong> — Finfinnee &amp; Online.</p>
+        </div>
+
+        <!-- Contacts / Online List -->
+        <div class="card widget-card">
+          <div class="widget-title">
+            <span>🟢 Contacts (Online)</span>
+            <span id="online-count" class="online-pill">4</span>
+          </div>
+          <div id="online-contacts-list" class="contacts-list"></div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- 5. MESSENGER / REAL-TIME CHAT POPUP -->
+    <div id="messenger-popup" class="messenger-popup hidden">
+      <div class="messenger-header">
+        <div class="chat-user-meta">
+          <span class="online-dot"></span>
+          <strong id="chat-partner-name">Messenger — Ergaa Dhuunfaa</strong>
+        </div>
+        <button class="close-chat-btn" onclick="toggleMessenger()">✕</button>
+      </div>
+      <div class="messenger-body">
+        <div class="chat-users-strip" id="chat-users-strip"></div>
+        <div class="chat-messages" id="chat-messages"></div>
+      </div>
+      <form class="messenger-input" onsubmit="sendDirectMessage(event)">
+        <input type="text" id="chat-input" placeholder="Ergaa barreessi..." required />
+        <button type="submit">➤</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- LEGAL & INFO MODAL (About, Contact, Privacy, Terms, Community Standards) -->
+  <div id="legal-modal" class="modal-backdrop hidden" onclick="closeLegalModal(event)">
+    <div class="modal-box" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3 id="legal-modal-title">Title</h3>
+        <button class="close-btn" onclick="closeLegalModal()">✕</button>
+      </div>
+      <div id="legal-modal-body" class="modal-body"></div>
+      <div class="modal-footer">
+        <button class="btn-primary" onclick="closeLegalModal()">Cufi (Close)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STORY VIEWER MODAL -->
+  <div id="story-modal" class="modal-backdrop hidden" onclick="closeStoryModal()">
+    <div class="story-viewer" onclick="event.stopPropagation()">
+      <div class="story-progress"><div class="story-progress-fill"></div></div>
+      <div class="story-top">
+        <strong id="story-author">Author</strong>
+        <button onclick="closeStoryModal()">✕</button>
+      </div>
+      <div id="story-display" class="story-content"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
