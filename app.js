@@ -1244,6 +1244,158 @@ if (state.currentUser) {
   if (state.currentUser) {
     ensureFollowArrays();
     renderFollowAndOwnerPanel();
+  }// ============================================================================
+// DABALATA GAMA DUUBAA — LIVE STORY UPLOAD & REALTIME-LIKE SYNC
+// Abbaa Weebsaayitii: Nesru Michael | nesrumichael@gmail.com | +251923502787
+// ============================================================================
+(function () {
+  const STORIES_STORAGE_KEY = "nesru_live_stories_v1";
+  const STORY_CHANNEL_NAME = "nesru_stories_sync_channel";
+
+  const STORY_THEMES = [
+    "linear-gradient(135deg,#1877f2,#0d47a1)",
+    "linear-gradient(135deg,#10b981,#047857)",
+    "linear-gradient(135deg,#f59e0b,#b45309)",
+    "linear-gradient(135deg,#8b5cf6,#5b21b6)",
+    "linear-gradient(135deg,#ec4899,#9d174d)"
+  ];
+
+  // BroadcastChannel yoo jiraate tab/window biroo waliin battalaan wal-quunnamsiisuuf
+  let storyChannel = null;
+  try {
+    if ("BroadcastChannel" in window) {
+      storyChannel = new BroadcastChannel(STORY_CHANNEL_NAME);
+    }
+  } catch (e) {
+    storyChannel = null;
   }
+
+  function loadSavedStories() {
+    try {
+      const raw = localStorage.getItem(STORIES_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function saveAndSyncStories(storiesArr) {
+    state.stories = storiesArr;
+    try {
+      localStorage.setItem(STORIES_STORAGE_KEY, JSON.stringify(storiesArr));
+    } catch (e) {
+      console.warn("Story storage error:", e);
+    }
+    saveState();
+
+    if (storyChannel) {
+      try {
+        storyChannel.postMessage({ type: "STORIES_UPDATED", stories: storiesArr });
+      } catch (e) {}
+    }
+  }
+
+  // Jalqaba irratti stories ol-kaa'aman fiduu (isa haaraa dursa kaa'uun)
+  const cachedStories = loadSavedStories();
+  if (Array.isArray(cachedStories) && cachedStories.length > 0) {
+    state.stories = cachedStories;
+  }
+
+  // Namni kamuu Story haaraa akka ol-baasuuf function
+  window.publishUserStory = function (text, bgTheme) {
+    if (!state.currentUser) {
+      alert("Maaloo jalqaba seeni (Login) godhi.");
+      return;
+    }
+    const cleanText = (text || "").trim();
+    if (!cleanText) {
+      alert("Maaloo barreeffama Story galchi.");
+      return;
+    }
+
+    const theme =
+      bgTheme || STORY_THEMES[Math.floor(Math.random() * STORY_THEMES.length)];
+
+    const newStory = {
+      id: "st-" + Date.now(),
+      author: state.currentUser.full_name,
+      author_id: state.currentUser.id,
+      text: cleanText,
+      bg: theme,
+      created_at: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    };
+
+    // Isa haaraa gara jalqabaa (unshift) akka dursa mul'atuuf
+    const updated = [newStory, ...(Array.isArray(state.stories) ? state.stories : [])];
+    saveAndSyncStories(updated);
+    renderEnhancedStoriesBar();
+  };
+
+  window.openAddStoryPrompt = function () {
+    const text = prompt("Story haaraa maal maxxansuu barbaadda?");
+    if (text && text.trim()) {
+      window.publishUserStory(text.trim());
+    }
+  };
+
+  // Kaardii "+ Add Story" dabalatee stories hunda isa haaraa wajjin mul'isuu
+  window.renderEnhancedStoriesBar = function () {
+    const bar = document.getElementById("stories-bar");
+    if (!bar) return;
+
+    const addCard = `
+      <div class="story-card" style="background:linear-gradient(135deg,#374151,#111827);border:2px dashed rgba(255,255,255,0.45);" onclick="openAddStoryPrompt()" title="Story haaraa ol-baasi">
+        <div class="story-avatar-ring" style="background:#1877f2;color:#fff;border-color:#fff;font-size:18px;">+</div>
+        <div class="story-name">Story Ol-baasi<br/><small style="font-weight:400;opacity:0.85;">(Add Story)</small></div>
+      </div>
+    `;
+
+    const itemsHtml = (state.stories || [])
+      .map(
+        (s) => `
+        <div class="story-card" style="background:${s.bg || STORY_THEMES[0]}" onclick="openStory('${s.id}')">
+          <div class="story-avatar-ring">${(s.author || "N")[0]}</div>
+          <div>
+            <div class="story-name">${s.author}</div>
+            ${s.created_at ? `<div style="font-size:10px;opacity:0.85;">${s.created_at}</div>` : ""}
+          </div>
+        </div>
+      `
+      )
+      .join("");
+
+    bar.innerHTML = addCard + itemsHtml;
+  };
+
+  // Tab/Browser biraa yoo story haaraan ol-ba'e battalaan wal-simsiisuu
+  if (storyChannel) {
+    storyChannel.onmessage = function (event) {
+      if (event.data && event.data.type === "STORIES_UPDATED" && Array.isArray(event.data.stories)) {
+        state.stories = event.data.stories;
+        renderEnhancedStoriesBar();
+      }
+    };
+  }
+
+  // Storage event (browser biroo/tab biroo keessatti jijjiirama yoo uumame)
+  window.addEventListener("storage", function (e) {
+    if (e.key === STORIES_STORAGE_KEY && e.newValue) {
+      try {
+        state.stories = JSON.parse(e.newValue);
+        renderEnhancedStoriesBar();
+      } catch (err) {}
+    }
+  });
+
+  const origInitApp = window.initApp;
+  window.initApp = function () {
+    if (typeof origInitApp === "function") origInitApp();
+    renderEnhancedStoriesBar();
+  };
+
+  if (state.currentUser) {
+    renderEnhancedStoriesBar();
+  }
+})();
 })();
 })();
