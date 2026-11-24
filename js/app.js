@@ -117,6 +117,8 @@ const DEFAULT_STATE = {
   currentFilter: "all",
   activeChatUserId: "user-demo-1",
   settings: { defaultPrivacy: "public" },
+  following: [],
+  friendships: [],
   registeredUsers: [
     {
       id: "user-demo-1",
@@ -188,7 +190,12 @@ let state = loadState();
 function loadState() {
   try {
     const saved = localStorage.getItem("nesru_m_global_state_v5");
-    if (saved) return JSON.parse(saved);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      parsed.following = parsed.following || [];
+      parsed.friendships = parsed.friendships || [];
+      return parsed;
+    }
   } catch (e) {}
   return JSON.parse(JSON.stringify(DEFAULT_STATE));
 }
@@ -201,6 +208,33 @@ function saveState() {
 
 function isUuid(val) {
   return typeof val === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
+}
+
+function isOwnFounderCredentials(identifier, fullName, email) {
+  const idL = (identifier || "").trim().toLowerCase();
+  const nameL = (fullName || "").trim().toLowerCase();
+  const emailL = (email || "").trim().toLowerCase();
+
+  const matchesEmail = idL === PROTECTED_FOUNDER.email.toLowerCase() || emailL === PROTECTED_FOUNDER.email.toLowerCase();
+  const matchesUsername = idL === PROTECTED_FOUNDER.username.toLowerCase();
+  const matchesName = nameL === "nesru m" || nameL === "nesru michael" || nameL === "nesru michael kasim";
+
+  return matchesEmail || matchesUsername || matchesName;
+}
+
+function isImpersonatingFounder(identifier, fullName, email) {
+  if (isOwnFounderCredentials(identifier, fullName, email)) {
+    return false;
+  }
+  const idLower = (identifier || "").trim().toLowerCase();
+  const nameLower = (fullName || "").trim().toLowerCase();
+  const emailLower = (email || "").trim().toLowerCase();
+
+  const blockedUsernames = ["nesru_m", "nesru m", "founder", "admin"];
+  if (blockedUsernames.includes(idLower)) return true;
+  if (nameLower && blockedUsernames.includes(nameLower)) return true;
+  if (emailLower && emailLower === PROTECTED_FOUNDER.email.toLowerCase()) return false;
+  return false;
 }
 
 async function syncProfileToSupabase(userObj) {
@@ -241,7 +275,7 @@ async function syncPostsFromSupabase() {
           author_id: row.author_id,
           author_name: row.author_name || "Member",
           author_avatar: row.author_avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(row.author_name || "U")}&background=1877f2&color=fff&size=200`,
-          isFounder: row.author_id === PROTECTED_FOUNDER.id,
+          isFounder: row.author_id === PROTECTED_FOUNDER.id || row.author_name === PROTECTED_FOUNDER.full_name,
           content: row.content || "",
           media_url: row.media_url || "",
           media_type: row.media_type || "",
@@ -310,6 +344,57 @@ async function syncMessagesFromSupabase() {
   }
 }
 
+async function syncSocialGraphFromSupabase() {
+  if (!sb || !state.currentUser) return;
+  const uid = state.currentUser.id;
+
+  try {
+    const { data: profs } = await sb.from("profiles").select("*").limit(100);
+    if (Array.isArray(profs) && profs.length > 0) {
+      state.registeredUsers = state.registeredUsers || [];
+      const existingIds = new Set(state.registeredUsers.map(u => u.id));
+      profs.forEach(p => {
+        if (!existingIds.has(p.id)) {
+          state.registeredUsers.push({
+            id: p.id,
+            username: p.username || (p.full_name || "user").toLowerCase().replace(/\s+/g, "_"),
+            full_name: p.full_name || "Member",
+            email: "",
+            country: p.country || "Ethiopia",
+            language: p.language || "om",
+            role: p.role || "member",
+            avatar_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(p.full_name || "U")}&background=1877f2&color=fff&size=200`,
+            bio: p.bio || "",
+            online: true
+          });
+          existingIds.add(p.id);
+        }
+      });
+    }
+
+    if (isUuid(uid)) {
+      const { data: folData } = await sb.from("follows").select("*").eq("follower_id", uid);
+      if (Array.isArray(folData)) {
+        state.following = folData.map(x => x.following_id);
+      }
+
+      const { data: frData } = await sb
+        .from("friendships")
+        .select("*")
+        .or(`requester_id.eq.${uid},addressee_id.eq.${uid}`);
+      if (Array.isArray(frData)) {
+        state.friendships = frData;
+      }
+    }
+
+    saveState();
+    renderFriends();
+    renderOnlineContacts();
+  } catch (e) {
+    console.warn("Social graph sync warning:", e);
+  }
+}
+
 function subscribeSupabaseRealtime() {
   if (!sb) return;
   try {
@@ -324,7 +409,7 @@ function subscribeSupabaseRealtime() {
             author_id: row.author_id,
             author_name: row.author_name || "Member",
             author_avatar: row.author_avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(row.author_name || "U")}&background=1877f2&color=fff&size=200`,
-            isFounder: row.author_id === PROTECTED_FOUNDER.id,
+            isFounder: row.author_id === PROTECTED_FOUNDER.id || row.author_name === PROTECTED_FOUNDER.full_name,
             content: row.content || "",
             media_url: row.media_url || "",
             media_type: row.media_type || "",
@@ -448,21 +533,6 @@ function switchAuthTab(tab) {
   document.getElementById("signup-form").classList.toggle("hidden", tab !== "signup");
 }
 
-function isImpersonatingFounder(identifier, fullName, email) {
-  const idLower = (identifier || "").trim().toLowerCase();
-  const nameLower = (fullName || "").trim().toLowerCase();
-  const emailLower = (email || "").trim().toLowerCase();
-
-  const founderEmails = ["nesrumichael@gmail.com", PROTECTED_FOUNDER.email.toLowerCase()];
-  const founderUsernames = ["nesrumichael", "nesru_m", "nesru m", "founder", "admin"];
-  const founderNames = ["nesru m", "nesru michael", "nesru michael kasim"];
-
-  if (founderEmails.includes(idLower) || founderEmails.includes(emailLower)) return true;
-  if (founderUsernames.includes(idLower)) return true;
-  if (nameLower && founderNames.includes(nameLower)) return true;
-  return false;
-}
-
 async function handleLogin(e) {
   e.preventDefault();
   clearAuthAlert();
@@ -480,16 +550,17 @@ async function handleLogin(e) {
     if (!error && data && data.user) {
       const u = data.user;
       const meta = u.user_metadata || {};
+      const ownFounder = isOwnFounderCredentials(identifier, meta.full_name, u.email);
       const loggedUser = {
         id: u.id,
-        username: meta.username || identifier.split("@")[0],
-        full_name: meta.full_name || identifier.split("@")[0],
+        username: ownFounder ? PROTECTED_FOUNDER.username : (meta.username || identifier.split("@")[0]),
+        full_name: ownFounder ? PROTECTED_FOUNDER.full_name : (meta.full_name || identifier.split("@")[0]),
         email: u.email,
         country: state.selectedCountry || meta.country || "Ethiopia",
         language: state.selectedLanguage || meta.language || "om",
-        role: "member",
-        avatar_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(meta.full_name || identifier)}&background=1877f2&color=fff&size=200`,
-        bio: meta.bio || "",
+        role: ownFounder ? "founder" : "member",
+        avatar_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(ownFounder ? PROTECTED_FOUNDER.full_name : (meta.full_name || identifier))}&background=1877f2&color=fff&size=200`,
+        bio: meta.bio || (ownFounder ? PROTECTED_FOUNDER.bio : ""),
         online: true
       };
       state.currentUser = loggedUser;
@@ -503,6 +574,26 @@ async function handleLogin(e) {
   const found = (state.registeredUsers || []).find(
     u => u.email.toLowerCase() === identifier || u.username.toLowerCase() === identifier
   );
+
+  if (!found && isOwnFounderCredentials(identifier, "", "")) {
+    if (password.length < 6) {
+      showAuthAlert("Password must be at least 6 characters.");
+      return;
+    }
+    const founderUser = {
+      ...PROTECTED_FOUNDER,
+      email: identifier.includes("@") ? identifier : PROTECTED_FOUNDER.email,
+      passwordHash: hashPassword(password),
+      country: state.selectedCountry || "Ethiopia",
+      language: state.selectedLanguage || "om",
+      online: true
+    };
+    state.registeredUsers.push(founderUser);
+    state.currentUser = founderUser;
+    saveState();
+    enterProtectedApp();
+    return;
+  }
 
   if (!found) {
     showAuthAlert("Account not found. Please sign up first to create your account.");
@@ -543,15 +634,17 @@ async function handleSignup(e) {
     return;
   }
 
+  const ownFounder = isOwnFounderCredentials(username, fullName, email);
+
   const exists = (state.registeredUsers || []).some(
     u => u.email.toLowerCase() === email || u.username.toLowerCase() === username
   );
-  if (exists) {
+  if (exists && !ownFounder) {
     showAuthAlert("This email or username is already registered. Please log in instead.");
     return;
   }
 
-  let createdUserId = "user-" + Date.now();
+  let createdUserId = ownFounder ? PROTECTED_FOUNDER.id : ("user-" + Date.now());
   if (sb) {
     const { data, error } = await sb.auth.signUp({
       email,
@@ -573,12 +666,13 @@ async function handleSignup(e) {
     passwordHash: hashPassword(password),
     country,
     language,
-    role: "member",
+    role: ownFounder ? "founder" : "member",
     avatar_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=1877f2&color=fff&size=200`,
-    bio: `${fullName} from ${country}`,
+    bio: ownFounder ? PROTECTED_FOUNDER.bio : `${fullName} from ${country}`,
     online: true
   };
 
+  state.registeredUsers = (state.registeredUsers || []).filter(u => u.email.toLowerCase() !== email && u.username.toLowerCase() !== username);
   state.registeredUsers.push(newUser);
   state.currentUser = newUser;
   state.selectedCountry = country;
@@ -603,6 +697,12 @@ async function handleLogout() {
   populateLocaleSelects();
 }
 
+function isCurrentUserFounder() {
+  const u = state.currentUser;
+  if (!u) return false;
+  return u.role === "founder" || isOwnFounderCredentials(u.username, u.full_name, u.email);
+}
+
 function enterProtectedApp() {
   if (!state.currentUser) {
     document.getElementById("app-shell").classList.add("hidden");
@@ -610,8 +710,10 @@ function enterProtectedApp() {
     return;
   }
 
-  if (state.currentUser.id !== PROTECTED_FOUNDER.id) {
+  if (!isCurrentUserFounder()) {
     state.currentUser.role = "member";
+  } else {
+    state.currentUser.role = "founder";
   }
 
   document.getElementById("auth-screen").classList.add("hidden");
@@ -629,6 +731,7 @@ function enterProtectedApp() {
 
   syncPostsFromSupabase();
   syncMessagesFromSupabase();
+  syncSocialGraphFromSupabase();
   subscribeSupabaseRealtime();
 }
 
@@ -643,7 +746,7 @@ function updateUserLocaleUI() {
   document.getElementById("drop-fullname").textContent = u.full_name;
   document.getElementById("drop-email").textContent = u.email;
   document.getElementById("drop-locale-info").textContent = `${country} • ${langObj.name}`;
-  document.getElementById("role-badge").textContent = u.id === PROTECTED_FOUNDER.id ? "✔ Founder & Owner" : "✔ Verified Member";
+  document.getElementById("role-badge").textContent = isCurrentUserFounder() ? "✔ Founder & Owner" : "✔ Verified Member";
 
   document.getElementById("side-avatar").src = u.avatar_url;
   document.getElementById("side-fullname").textContent = u.full_name;
@@ -671,6 +774,7 @@ function navigateTo(view) {
   if (targetSec) targetSec.classList.remove("hidden");
   if (view === "profile") renderProfileView();
   if (view === "settings") populateSettingsForm();
+  if (view === "friends") renderFriends();
 }
 
 function populateSettingsForm() {
@@ -834,7 +938,7 @@ async function createNewPost() {
     author_id: u.id,
     author_name: u.full_name,
     author_avatar: u.avatar_url,
-    isFounder: u.id === PROTECTED_FOUNDER.id,
+    isFounder: isCurrentUserFounder(),
     content,
     media_url: mediaUrl,
     media_type: mediaUrl ? mediaType : "",
@@ -1028,24 +1132,157 @@ function renderProfileView() {
   document.getElementById("prof-fullname").textContent = u.full_name;
   document.getElementById("prof-bio").textContent = u.bio || "";
   document.getElementById("prof-locale").textContent = `🌍 Country: ${u.country || state.selectedCountry} • 🌐 Language: ${langObj.name}`;
-  document.getElementById("prof-contact-line").textContent = `📧 ${u.email} (@${u.username})`;
+  document.getElementById("prof-contact-line").textContent = `📧 ${u.email} (@${u.username}) • Following: ${(state.following || []).length}`;
   const myPosts = state.posts.filter(p => p.author_id === u.id);
   document.getElementById("profile-posts-stream").innerHTML = myPosts.map(p => renderPostCardHTML(p)).join("");
+}
+
+function getFriendshipWith(otherUserId) {
+  const uid = state.currentUser?.id;
+  if (!uid) return null;
+  return (state.friendships || []).find(
+    f => (f.requester_id === uid && f.addressee_id === otherUserId) ||
+         (f.requester_id === otherUserId && f.addressee_id === uid)
+  ) || null;
+}
+
+function isFollowingUser(otherUserId) {
+  return (state.following || []).includes(otherUserId);
+}
+
+async function toggleFollowUser(targetUserId) {
+  if (!state.currentUser || targetUserId === state.currentUser.id) return;
+  const uid = state.currentUser.id;
+  state.following = state.following || [];
+  const idx = state.following.indexOf(targetUserId);
+
+  if (idx > -1) {
+    state.following.splice(idx, 1);
+    saveState();
+    renderFriends();
+    if (sb && isUuid(uid) && isUuid(targetUserId)) {
+      await sb.from("follows").delete().eq("follower_id", uid).eq("following_id", targetUserId);
+    }
+  } else {
+    state.following.push(targetUserId);
+    saveState();
+    renderFriends();
+    if (sb && isUuid(uid) && isUuid(targetUserId)) {
+      await sb.from("follows").insert({ follower_id: uid, following_id: targetUserId });
+    }
+  }
+}
+
+async function sendFriendRequest(targetUserId) {
+  if (!state.currentUser || targetUserId === state.currentUser.id) return;
+  const uid = state.currentUser.id;
+  state.friendships = state.friendships || [];
+  if (getFriendshipWith(targetUserId)) return;
+
+  const newReq = {
+    id: "fr-" + Date.now(),
+    requester_id: uid,
+    addressee_id: targetUserId,
+    status: "pending"
+  };
+  state.friendships.push(newReq);
+  saveState();
+  renderFriends();
+
+  if (sb && isUuid(uid) && isUuid(targetUserId)) {
+    const { data } = await sb
+      .from("friendships")
+      .insert({ requester_id: uid, addressee_id: targetUserId, status: "pending" })
+      .select()
+      .single();
+    if (data && data.id) {
+      newReq.id = data.id;
+      saveState();
+    }
+  }
+}
+
+async function acceptFriendRequest(requesterId) {
+  if (!state.currentUser) return;
+  const uid = state.currentUser.id;
+  const fr = (state.friendships || []).find(
+    f => f.requester_id === requesterId && f.addressee_id === uid && f.status === "pending"
+  );
+  if (!fr) return;
+
+  fr.status = "accepted";
+  saveState();
+  renderFriends();
+
+  if (sb && isUuid(requesterId) && isUuid(uid)) {
+    await sb
+      .from("friendships")
+      .update({ status: "accepted" })
+      .eq("requester_id", requesterId)
+      .eq("addressee_id", uid);
+  }
+}
+
+async function removeFriendship(otherUserId) {
+  if (!state.currentUser) return;
+  const uid = state.currentUser.id;
+  state.friendships = (state.friendships || []).filter(
+    f => !((f.requester_id === uid && f.addressee_id === otherUserId) ||
+           (f.requester_id === otherUserId && f.addressee_id === uid))
+  );
+  saveState();
+  renderFriends();
+
+  if (sb && isUuid(uid) && isUuid(otherUserId)) {
+    await sb.from("friendships").delete().eq("requester_id", uid).eq("addressee_id", otherUserId);
+    await sb.from("friendships").delete().eq("requester_id", otherUserId).eq("addressee_id", uid);
+  }
 }
 
 function renderFriends() {
   const container = document.getElementById("friends-list-container");
   if (!container || !state.currentUser) return;
-  const others = (state.registeredUsers || []).filter(u => u.id !== state.currentUser.id);
-  container.innerHTML = others.map(u => `
-    <div class="mini-card">
-      <strong>${u.full_name}</strong>
-      <p class="post-meta">🌍 ${u.country || "World"}</p>
-      <div style="margin-top:8px;display:flex;gap:6px;">
-        <button type="button" class="btn-secondary" onclick="openChatWith('${u.id}')">💬 Chat</button>
+  const uid = state.currentUser.id;
+  const others = (state.registeredUsers || []).filter(u => u.id !== uid);
+
+  if (!others.length) {
+    container.innerHTML = `<div class="mini-card"><p class="post-meta">No other members yet.</p></div>`;
+    return;
+  }
+
+  container.innerHTML = others.map(u => {
+    const following = isFollowingUser(u.id);
+    const fr = getFriendshipWith(u.id);
+
+    let friendBtnHTML = `<button type="button" class="btn-primary" onclick="sendFriendRequest('${u.id}')">+ Add Friend</button>`;
+    if (fr) {
+      if (fr.status === "accepted") {
+        friendBtnHTML = `<button type="button" class="btn-secondary" onclick="removeFriendship('${u.id}')">✔ Friends</button>`;
+      } else if (fr.requester_id === uid) {
+        friendBtnHTML = `<button type="button" class="btn-secondary" onclick="removeFriendship('${u.id}')">⏳ Requested</button>`;
+      } else {
+        friendBtnHTML = `<button type="button" class="btn-primary" onclick="acceptFriendRequest('${u.id}')">✔ Accept</button>`;
+      }
+    }
+
+    const followBtnHTML = `
+      <button type="button" class="${following ? 'btn-secondary' : 'btn-primary'}" onclick="toggleFollowUser('${u.id}')">
+        ${following ? 'Following' : '+ Follow'}
+      </button>
+    `;
+
+    return `
+      <div class="mini-card">
+        <strong>${u.full_name}</strong>
+        <p class="post-meta">🌍 ${u.country || "World"} • @${u.username || u.id}</p>
+        <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;">
+          ${friendBtnHTML}
+          ${followBtnHTML}
+          <button type="button" class="btn-secondary" onclick="openChatWith('${u.id}')">💬 Chat</button>
+        </div>
       </div>
-    </div>
-  `).join("");
+    `;
+  }).join("");
 }
 
 function renderGroups() {
