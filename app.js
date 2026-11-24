@@ -2259,4 +2259,69 @@ if (state.currentUser) {
     mountServerConsoleButton();
     pullLatestFromSupabaseIfConnected();
   }
+})();// ============================================================================
+// DABALATA GAMA DUUBAA — OFFICIAL LIVE URL: https://nesrumichael.github.io/nesru-chat/
+// Abbaa Weebsaayitii: Nesru Michael | nesrumichael@gmail.com | +251923502787
+// ============================================================================
+(function () {
+  try {
+    const OFFICIAL_SITE_URL = "https://nesrumichael.github.io/nesru-chat/";
+
+    window.NESRU_OFFICIAL_URL = OFFICIAL_SITE_URL;
+
+    if (typeof state === "object" && state) {
+      state.officialUrl = OFFICIAL_SITE_URL;
+      if (typeof saveState === "function") {
+        try { saveState(); } catch (e) {}
+      }
+    }
+
+    // 1) Google SEO Canonical Link
+    let canonical = document.querySelector('link[rel="canonical"]');
+    if (!canonical) {
+      canonical = document.createElement("link");
+      canonical.rel = "canonical";
+      document.head.appendChild(canonical);
+    }
+    canonical.href = OFFICIAL_SITE_URL;
+
+    // 2) Meta Description
+    let metaDesc = document.querySelector('meta[name="description"]');
+    if (!metaDesc) {
+      metaDesc = document.createElement("meta");
+      metaDesc.name = "description";
+      metaDesc.content =
+        "Nesru Michael Social Platform — Weebsaayitii fi appii wal-quunnamtii hawaasaa, maxxansa, story fi ergaa battalaa.";
+      document.head.appendChild(metaDesc);
+    }
+
+    // 3) Open Graph URL (WhatsApp, Telegram, Facebook share preview)
+    let ogUrl = document.querySelector('meta[property="og:url"]');
+    if (!ogUrl) {
+      ogUrl = document.createElement("meta");
+      ogUrl.setAttribute("property", "og:url");
+      document.head.appendChild(ogUrl);
+    }
+    ogUrl.setAttribute("content", OFFICIAL_SITE_URL);
+
+    // 4) About & Contact Modal keessatti linkii kana dabaluu
+    if (typeof LEGAL_CONTENT === "object" && LEGAL_CONTENT) {
+      if (
+        LEGAL_CONTENT.about &&
+        typeof LEGAL_CONTENT.about.html === "string" &&
+        !LEGAL_CONTENT.about.html.includes(OFFICIAL_SITE_URL)
+      ) {
+        LEGAL_CONTENT.about.html += `<p><strong>Official Website:</strong> <a href="${OFFICIAL_SITE_URL}" target="_blank" rel="noopener">${OFFICIAL_SITE_URL}</a></p>`;
+      }
+      if (
+        LEGAL_CONTENT.contact &&
+        typeof LEGAL_CONTENT.contact.html === "string" &&
+        !LEGAL_CONTENT.contact.html.includes(OFFICIAL_SITE_URL)
+      ) {
+        LEGAL_CONTENT.contact.html += `<li><strong>Website Link:</strong> <a href="${OFFICIAL_SITE_URL}" target="_blank" rel="noopener">${OFFICIAL_SITE_URL}</a></li>`;
+      }
+    }
+  } catch (e) {
+    console.warn("Official URL setup note:", e);
+  }
 })();
