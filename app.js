@@ -834,4 +834,36 @@ if ("serviceWorker" in navigator) {
 // AUTO-BOOT IF LOGGED IN
 if (state.currentUser) {
   initApp();
-}
+}// ============================================================================
+// DABALATA GAMA DUUBAA (APPENDED) — SIRNA DURAANII UTUU HIN MIIDHIN
+// ============================================================================
+(function () {
+  function showOwnerButtonOnlyForFounder() {
+    const demoBtn = document.querySelector("#login-form .btn-demo");
+    if (demoBtn) {
+      demoBtn.style.display = "block";
+    }
+  }
+
+  // 1) Linkii irratti ?owner=nesru yoo itti dabaltu qofa qabduun siif mul'ata
+  if (window.location.search.includes("owner=nesru")) {
+    showOwnerButtonOnlyForFounder();
+  }
+
+  // 2) Logo "NM" fuula seensaa irra jiru yeroo 5 walitti aansitee yoo cuqaastu (bilbilaafis ni hojjeta!)
+  let tapCount = 0;
+  let tapTimer = null;
+  const brandLogo = document.querySelector(".brand-logo-large");
+  if (brandLogo) {
+    brandLogo.style.cursor = "pointer";
+    brandLogo.addEventListener("click", function () {
+      tapCount++;
+      clearTimeout(tapTimer);
+      tapTimer = setTimeout(() => { tapCount = 0; }, 2000);
+      if (tapCount >= 5) {
+        showOwnerButtonOnlyForFounder();
+        tapCount = 0;
+      }
+    });
+  }
+})();
