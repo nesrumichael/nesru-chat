@@ -1,3 +1,0 @@
-User-agent: *
-Allow: /
-Sitemap: https://nesrumichael.github.io/nesru-chat/sitemap.xml
