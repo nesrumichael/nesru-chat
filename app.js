@@ -1406,4 +1406,169 @@ if (state.currentUser) {
   if (state.currentUser) {
     renderEnhancedStoriesBar();
   }
+})();// ============================================================================
+// DABALATA GAMA DUUBAA — INSTANT LIVE POSTS, AUTHOR NAME & REALTIME NOTIFICATIONS
+// Abbaa Weebsaayitii: Nesru Michael | nesrumichael@gmail.com | +251923502787
+// ============================================================================
+(function () {
+  const LIVE_SYNC_CHANNEL = "nesru_live_posts_notif_sync_v1";
+  let liveChannel = null;
+  try {
+    if ("BroadcastChannel" in window) {
+      liveChannel = new BroadcastChannel(LIVE_SYNC_CHANNEL);
+    }
+  } catch (e) {
+    liveChannel = null;
+  }
+
+  // Notification haaraa uumuu fi badge/listii battalaan haaromsuu
+  window.pushLiveNotification = function (text) {
+    if (!text) return;
+    if (!Array.isArray(state.notifications)) state.notifications = [];
+    state.notifications.unshift({
+      id: "n-live-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
+      text: text,
+      read: false
+    });
+    saveState();
+    if (typeof renderNotifications === "function") {
+      renderNotifications();
+    }
+  };
+
+  // Waan barreeffamee fi nama barreessee (author) wajjin notification uumuu
+  function notifyEveryoneAboutPost(postObj) {
+    if (!postObj) return;
+    const authorName = postObj.author_name || "Fayyadamaa";
+    const snippet = (postObj.content || "").trim();
+    const shortText = snippet.length > 60 ? snippet.slice(0, 60) + "..." : snippet;
+    const notifMsg = shortText
+      ? `✍️ ${authorName} maxxansa haaraa barreessa: "${shortText}"`
+      : `✍️ ${authorName} maxxansa (media) haaraa maxxanseera.`;
+
+    window.pushLiveNotification(notifMsg);
+
+    // Tab / Browser biroo irratti battalaan erguu
+    if (liveChannel) {
+      try {
+        liveChannel.postMessage({
+          type: "NEW_LIVE_POST",
+          post: postObj,
+          notificationText: notifMsg
+        });
+      } catch (e) {}
+    }
+
+    // Yoo Supabase client jiraate gabatee posts keessatti galchuu yaaluu
+    if (typeof supabaseClient !== "undefined" && supabaseClient && state.currentUser) {
+      supabaseClient
+        .from("posts")
+        .insert([
+          {
+            content: postObj.content || "",
+            media_url: postObj.media_url || "",
+            media_type: postObj.media_type || "",
+            privacy: postObj.privacy || "public"
+          }
+        ])
+        .then(function () {})
+        .catch(function () {});
+    }
+  }
+
+  // createNewPost duraanii irratti dabaluu (sirna duraanii utuu hin haqin)
+  const origCreateNewPost = window.createNewPost;
+  window.createNewPost = function () {
+    const prevTopId = Array.isArray(state.posts) && state.posts[0] ? state.posts[0].id : null;
+    if (typeof origCreateNewPost === "function") {
+      origCreateNewPost();
+    }
+    const newestPost = Array.isArray(state.posts) && state.posts[0] ? state.posts[0] : null;
+    if (newestPost && newestPost.id !== prevTopId) {
+      notifyEveryoneAboutPost(newestPost);
+    }
+  };
+
+  // Tab / Browser biroo irraa postii fi notification haaraa yeruma sanatti fudhachuu
+  if (liveChannel) {
+    liveChannel.onmessage = function (event) {
+      const data = event && event.data;
+      if (!data) return;
+
+      if (data.type === "NEW_LIVE_POST" && data.post) {
+        const exists = (state.posts || []).some((p) => p.id === data.post.id);
+        if (!exists) {
+          state.posts.unshift(data.post);
+          saveState();
+          if (typeof renderPosts === "function") renderPosts();
+        }
+        if (data.notificationText) {
+          window.pushLiveNotification(data.notificationText);
+        }
+      }
+    };
+  }
+
+  // Supabase Realtime subscription (yoo supabaseClient active ta'e)
+  if (typeof supabaseClient !== "undefined" && supabaseClient) {
+    try {
+      supabaseClient
+        .channel("public-posts-realtime")
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "posts" },
+          function (payload) {
+            const row = payload && payload.new;
+            if (!row) return;
+            const incomingPost = {
+              id: row.id || "sb-" + Date.now(),
+              author_id: row.author_id || "remote-user",
+              author_name: "Fayyadamaa Haaraa",
+              author_avatar:
+                "https://ui-avatars.com/api/?name=User&background=1877f2&color=fff&size=200",
+              verified: false,
+              content: row.content || "",
+              media_url: row.media_url || "",
+              media_type: row.media_type || "",
+              privacy: row.privacy || "public",
+              created_at: "Amma (Live)",
+              likes: [],
+              shares: 0,
+              savedBy: [],
+              comments: []
+            };
+
+            const alreadyThere = (state.posts || []).some((p) => p.id === incomingPost.id);
+            if (!alreadyThere) {
+              state.posts.unshift(incomingPost);
+              saveState();
+              if (typeof renderPosts === "function") renderPosts();
+              window.pushLiveNotification(
+                `🔔 Maxxansi haaraa maxxanfameera: "${(incomingPost.content || "").slice(0, 50)}"`
+              );
+            }
+          }
+        )
+        .subscribe();
+    } catch (e) {
+      console.warn("Supabase realtime subscribe note:", e);
+    }
+  }
+
+  // Storage sync yoo tab biroo keessatti state jijjiirame
+  window.addEventListener("storage", function (e) {
+    if (e.key === "nesru_social_state_v1" && e.newValue) {
+      try {
+        const nextState = JSON.parse(e.newValue);
+        if (nextState && Array.isArray(nextState.posts)) {
+          state.posts = nextState.posts;
+          if (typeof renderPosts === "function") renderPosts();
+        }
+        if (nextState && Array.isArray(nextState.notifications)) {
+          state.notifications = nextState.notifications;
+          if (typeof renderNotifications === "function") renderNotifications();
+        }
+      } catch (err) {}
+    }
+  });
 })();
