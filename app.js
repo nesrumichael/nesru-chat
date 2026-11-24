@@ -2324,4 +2324,62 @@ if (state.currentUser) {
   } catch (e) {
     console.warn("Official URL setup note:", e);
   }
+})();// ============================================================================
+// DABALATA GAMA DUUBAA — SUPABASE FREE CLOUD WRITE & REALTIME SYNC
+// Abbaa Weebsaayitii: Nesru Michael | nesrumichael@gmail.com | +251923502787
+// ============================================================================
+(function () {
+  if (typeof supabaseClient === "undefined" || !supabaseClient) return;
+
+  // Yeroo postii haaraan uumamu gara Supabase 'posts' table erguu
+  const prevCreate = window.createNewPost;
+  window.createNewPost = async function () {
+    const prevTopId = Array.isArray(state.posts) && state.posts[0] ? state.posts[0].id : null;
+    if (typeof prevCreate === "function") prevCreate();
+
+    const newest = Array.isArray(state.posts) && state.posts[0] ? state.posts[0] : null;
+    if (!newest || newest.id === prevTopId) return;
+
+    try {
+      await supabaseClient.from("posts").insert([
+        {
+          author_id: newest.author_id || (state.currentUser && state.currentUser.id) || "anon",
+          author_name: newest.author_name || (state.currentUser && state.currentUser.full_name) || "Fayyadamaa",
+          author_avatar: newest.author_avatar || "",
+          content: newest.content || "",
+          media_url: newest.media_url || "",
+          media_type: newest.media_type || "",
+          privacy: newest.privacy || "public"
+        }
+      ]);
+    } catch (e) {
+      console.warn("Supabase post insert note:", e);
+    }
+  };
+
+  // Yeroo ergaa chat ergamu gara Supabase 'messages' table erguu
+  const prevSend = window.sendDirectMessage;
+  window.sendDirectMessage = async function (e) {
+    const inputEl = document.getElementById("chat-input");
+    const msgText = inputEl ? inputEl.value.trim() : "";
+    const receiverId = state.activeChatUserId || "";
+    const senderName = state.currentUser ? state.currentUser.full_name : "Fayyadamaa";
+    const senderId = state.currentUser ? state.currentUser.id : "anon";
+
+    if (typeof prevSend === "function") prevSend(e);
+
+    if (!msgText) return;
+    try {
+      await supabaseClient.from("messages").insert([
+        {
+          sender_id: senderId,
+          sender_name: senderName,
+          receiver_id: receiverId,
+          content: msgText
+        }
+      ]);
+    } catch (err) {
+      console.warn("Supabase message insert note:", err);
+    }
+  };
 })();
