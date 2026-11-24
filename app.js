@@ -864,6 +864,172 @@ if (state.currentUser) {
         showOwnerButtonOnlyForFounder();
         tapCount = 0;
       }
-    });
+    });// ============================================================================
+// DABALATA GAMA DUUBAA — ACCOUNT FEED, FOLLOW & 2,000 FRIEND LIMIT
+// Abbaa Appii: Nesru Michael | nesrumichael@gmail.com | +251923502787
+// ============================================================================
+(function () {
+  const MAX_FRIENDS_LIMIT = 2000;
+
+  // Mirkaneeffannaa galmee & abbummaa platformii
+  if (!state.platformMeta) {
+    state.platformMeta = {
+      owner: "Nesru Michael",
+      email: "nesrumichael@gmail.com",
+      phone: "+251923502787",
+      copyright: "© 2026 Nesru Michael. Mirgi abbummaa seeraan eegamaadha."
+    };
+  }
+
+  // Fayyadamaa kamuu irratti following fi friends array akka jiraatan mirkaneessi
+  state.users.forEach((u) => {
+    if (!Array.isArray(u.following)) u.following = [];
+    if (!Array.isArray(u.followers)) u.followers = [];
+    if (!Array.isArray(u.friendsList)) {
+      u.friendsList = u.friendStatus === "accepted" ? [u.id] : [];
+    }
+  });
+
+  if (state.currentUser) {
+    if (!Array.isArray(state.currentUser.following)) state.currentUser.following = [];
+    if (!Array.isArray(state.currentUser.followers)) state.currentUser.followers = [];
+    if (!Array.isArray(state.currentUser.friendsList)) state.currentUser.friendsList = [];
+  }
+
+  // Namoonni account mataa isaanii yeroo uumatan postii hundaa akka argan gochuu
+  const originalHandleSignup = window.handleSignup;
+  window.handleSignup = function (e) {
+    if (typeof originalHandleSignup === "function") {
+      originalHandleSignup(e);
+    }
+    if (state.currentUser) {
+      state.currentUser.following = state.currentUser.following || [];
+      state.currentUser.followers = state.currentUser.followers || [];
+      state.currentUser.friendsList = state.currentUser.friendsList || [];
+      state.currentFilter = "all";
+      saveState();
+      if (typeof renderPosts === "function") renderPosts();
+      if (typeof renderFriends === "function") renderEnhancedFriends();
+    }
+  };
+
+  // Follow toggle (daangaa malee ol dabalaa deema)
+  window.toggleFollowUser = function (targetUserId) {
+    if (!state.currentUser) return;
+    const me = state.users.find((u) => u.id === state.currentUser.id) || state.currentUser;
+    const target = state.users.find((u) => u.id === targetUserId);
+    if (!target) return;
+
+    me.following = me.following || [];
+    target.followers = target.followers || [];
+
+    const idx = me.following.indexOf(targetUserId);
+    if (idx > -1) {
+      me.following.splice(idx, 1);
+      const fIdx = target.followers.indexOf(me.id);
+      if (fIdx > -1) target.followers.splice(fIdx, 1);
+    } else {
+      me.following.push(targetUserId);
+      if (!target.followers.includes(me.id)) {
+        target.followers.push(me.id);
+      }
+    }
+
+    state.currentUser.following = me.following;
+    saveState();
+    renderEnhancedFriends();
+  };
+
+  // Add/Remove Friend (hanga 2,000 qofa)
+  window.toggleFriendWithLimit = function (targetUserId) {
+    if (!state.currentUser) return;
+    const me = state.users.find((u) => u.id === state.currentUser.id) || state.currentUser;
+    const target = state.users.find((u) => u.id === targetUserId);
+    if (!target) return;
+
+    me.friendsList = me.friendsList || [];
+    const existingIdx = me.friendsList.indexOf(targetUserId);
+
+    if (existingIdx > -1) {
+      me.friendsList.splice(existingIdx, 1);
+      target.friendStatus = "suggested";
+    } else {
+      if (me.friendsList.length >= MAX_FRIENDS_LIMIT) {
+        alert(
+          `Daangaan hiriyyummaa (Friends) hanga ${MAX_FRIENDS_LIMIT.toLocaleString()} guuteera! Hiriyyaa haaraa dabaluu hin dandeessu; garuu Follow gochuu ni dandeessa.`
+        );
+        return;
+      }
+      me.friendsList.push(targetUserId);
+      target.friendStatus = "accepted";
+    }
+
+    state.currentUser.friendsList = me.friendsList;
+    saveState();
+    renderEnhancedFriends();
+  };
+
+  // Fuula Friends irratti Follow + Friend (Max 2,000) + Followers counter mul'isuu
+  window.renderEnhancedFriends = function () {
+    const container = document.getElementById("friends-list-container");
+    if (!container || !state.currentUser) return;
+
+    const me = state.users.find((u) => u.id === state.currentUser.id) || state.currentUser;
+    const myFriends = me.friendsList || [];
+    const myFollowing = me.following || [];
+    const others = state.users.filter((u) => u.id !== me.id);
+
+    const summaryHtml = `
+      <div class="mini-card" style="grid-column: 1 / -1; background: #e7f3ff; border-color: #b6d4fe;">
+        <strong>📊 Walitti Dhufeenya Kee:</strong>
+        <span style="margin-left:10px;">🤝 Friends: <strong>${myFriends.length} / ${MAX_FRIENDS_LIMIT}</strong></span>
+        <span style="margin-left:10px;">➕ Following: <strong>${myFollowing.length}</strong></span>
+      </div>
+    `;
+
+    const cardsHtml = others
+      .map((u) => {
+        const isFriend = myFriends.includes(u.id) || u.friendStatus === "accepted";
+        const isFollowing = myFollowing.includes(u.id);
+        const followersCount = (u.followers || []).length + (isFollowing ? 1 : 0);
+
+        return `
+          <div class="mini-card">
+            <strong>${u.full_name}</strong>
+            <p class="post-meta">${u.bio || ""}</p>
+            <p style="margin:6px 0;font-size:12px;">
+              👥 Followers: <strong>${followersCount}</strong> •
+              Status: <strong>${isFriend ? "FRIEND" : "SUGGESTED"}</strong>
+            </p>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+              <button class="${isFriend ? "btn-secondary" : "btn-primary"}" onclick="toggleFriendWithLimit('${u.id}')">
+                ${isFriend ? "✔ Friend" : "+ Add Friend"}
+              </button>
+              <button class="${isFollowing ? "btn-secondary" : "btn-demo"}" style="margin-top:0;" onclick="toggleFollowUser('${u.id}')">
+                ${isFollowing ? "Following" : "+ Follow"}
+              </button>
+              <button class="btn-secondary" onclick="openChatWith('${u.id}')">💬</button>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+
+    container.innerHTML = summaryHtml + cardsHtml;
+  };
+
+  // Yeroo appiin jalqabu renderEnhancedFriends hojiirra oolchuu
+  const originalInitApp = window.initApp;
+  window.initApp = function () {
+    if (typeof originalInitApp === "function") {
+      originalInitApp();
+    }
+    renderEnhancedFriends();
+  };
+
+  if (state.currentUser) {
+    renderEnhancedFriends();
+  }
+})();
   }
 })();
