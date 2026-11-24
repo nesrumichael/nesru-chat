@@ -1571,4 +1571,184 @@ if (state.currentUser) {
       } catch (err) {}
     }
   });
+})();// ============================================================================
+// DABALATA GAMA DUUBAA — KALLATTIIN LIVE POST & DIRECT CHAT (SUPABASE MALE)
+// Abbaa Weebsaayitii: Nesru Michael | nesrumichael@gmail.com | +251923502787
+// ============================================================================
+(function () {
+  const INSTANT_BUS_KEY = "nesru_instant_social_bus_v1";
+  const INSTANT_CHANNEL = "nesru_instant_social_channel_v1";
+
+  let instantChannel = null;
+  try {
+    if ("BroadcastChannel" in window) {
+      instantChannel = new BroadcastChannel(INSTANT_CHANNEL);
+    }
+  } catch (e) {
+    instantChannel = null;
+  }
+
+  function broadcastEvent(payload) {
+    const packet = Object.assign({}, payload, {
+      ts: Date.now(),
+      senderId: state.currentUser ? state.currentUser.id : "guest",
+      senderName: state.currentUser ? state.currentUser.full_name : "Fayyadamaa"
+    });
+
+    try {
+      localStorage.setItem(INSTANT_BUS_KEY, JSON.stringify(packet));
+    } catch (e) {}
+
+    if (instantChannel) {
+      try {
+        instantChannel.postMessage(packet);
+      } catch (e) {}
+    }
+  }
+
+  // 1) Yeroo namni postii godhu yeruma sanatti hunda bira akka ga'u gochuu
+  const prevCreatePost = window.createNewPost;
+  window.createNewPost = function () {
+    const prevTopId = Array.isArray(state.posts) && state.posts[0] ? state.posts[0].id : null;
+    if (typeof prevCreatePost === "function") {
+      prevCreatePost();
+    }
+
+    const latestPost = Array.isArray(state.posts) && state.posts[0] ? state.posts[0] : null;
+    if (latestPost && latestPost.id !== prevTopId) {
+      // Hundaaf public/live akka ta'u mirkaneessuu
+      if (!latestPost.privacy || latestPost.privacy === "friends") {
+        latestPost.privacy = "public";
+      }
+      saveState();
+      if (typeof renderPosts === "function") renderPosts();
+
+      const author = latestPost.author_name || (state.currentUser && state.currentUser.full_name) || "Fayyadamaa";
+      const textPreview = (latestPost.content || "").trim();
+      const shortPreview = textPreview.length > 55 ? textPreview.slice(0, 55) + "..." : textPreview;
+
+      const notifMsg = shortPreview
+        ? `📢 ${author} maxxansa haaraa godhe: "${shortPreview}"`
+        : `📢 ${author} maxxansa haaraa maxxanseera.`;
+
+      if (typeof window.pushLiveNotification === "function") {
+        window.pushLiveNotification(notifMsg);
+      } else if (Array.isArray(state.notifications)) {
+        state.notifications.unshift({ id: "n-" + Date.now(), text: notifMsg, read: false });
+        saveState();
+        if (typeof renderNotifications === "function") renderNotifications();
+      }
+
+      broadcastEvent({
+        type: "INSTANT_POST",
+        post: latestPost,
+        notifText: notifMsg
+      });
+    }
+  };
+
+  // 2) Namoonni kallattiin chat dhuunfaa akka walii godhan gochuu
+  const prevSendDirectMessage = window.sendDirectMessage;
+  window.sendDirectMessage = function (e) {
+    if (e && typeof e.preventDefault === "function") e.preventDefault();
+    const input = document.getElementById("chat-input");
+    const text = input ? input.value.trim() : "";
+    if (!text || !state.currentUser) return;
+
+    const partnerId = state.activeChatUserId;
+    if (!partnerId) return;
+
+    const prevLen = (state.messages && state.messages[partnerId]) ? state.messages[partnerId].length : 0;
+
+    if (typeof prevSendDirectMessage === "function") {
+      prevSendDirectMessage(e);
+    }
+
+    const msgs = state.messages && state.messages[partnerId] ? state.messages[partnerId] : [];
+    const lastMsg = msgs.length > prevLen ? msgs[msgs.length - 1] : msgs[msgs.length - 1];
+
+    if (lastMsg) {
+      // Namoota weebsaayitii irratti jiran hundaaf akka chat dhuunfaa mul'atu dabarsuu
+      broadcastEvent({
+        type: "INSTANT_DM",
+        fromUserId: state.currentUser.id,
+        fromName: state.currentUser.full_name,
+        toUserId: partnerId,
+        message: lastMsg
+      });
+
+      const dmNotif = `💬 ${state.currentUser.full_name} ergaa dhuunfaa erge: "${text.slice(0, 45)}"`;
+      if (typeof window.pushLiveNotification === "function") {
+        window.pushLiveNotification(dmNotif);
+      }
+    }
+  };
+
+  // 3) Ergaa ykn postii namoota biroo yeruma sanatti fudhachuu
+  function handleIncomingPacket(packet) {
+    if (!packet || !packet.type) return;
+
+    if (packet.type === "INSTANT_POST" && packet.post) {
+      const exists = (state.posts || []).some((p) => p.id === packet.post.id);
+      if (!exists) {
+        state.posts.unshift(packet.post);
+        saveState();
+        if (typeof renderPosts === "function") renderPosts();
+      }
+      if (packet.notifText) {
+        if (typeof window.pushLiveNotification === "function") {
+          window.pushLiveNotification(packet.notifText);
+        } else if (Array.isArray(state.notifications)) {
+          state.notifications.unshift({ id: "n-" + Date.now(), text: packet.notifText, read: false });
+          saveState();
+          if (typeof renderNotifications === "function") renderNotifications();
+        }
+      }
+    }
+
+    if (packet.type === "INSTANT_DM" && packet.message) {
+      if (!state.messages) state.messages = {};
+
+      // Nama ergaan ergameef irratti chat sana galchuu
+      const targetBucket = packet.toUserId;
+      const senderBucket = packet.fromUserId;
+
+      if (targetBucket) {
+        if (!Array.isArray(state.messages[targetBucket])) state.messages[targetBucket] = [];
+        const dup1 = state.messages[targetBucket].some(
+          (m) => m.text === packet.message.text && m.time === packet.message.time
+        );
+        if (!dup1) state.messages[targetBucket].push(packet.message);
+      }
+
+      if (senderBucket && senderBucket !== targetBucket) {
+        if (!Array.isArray(state.messages[senderBucket])) state.messages[senderBucket] = [];
+        const dup2 = state.messages[senderBucket].some(
+          (m) => m.text === packet.message.text && m.time === packet.message.time
+        );
+        if (!dup2) state.messages[senderBucket].push(packet.message);
+      }
+
+      saveState();
+
+      const popup = document.getElementById("messenger-popup");
+      if (popup && !popup.classList.contains("hidden") && typeof renderMessenger === "function") {
+        renderMessenger();
+      }
+    }
+  }
+
+  if (instantChannel) {
+    instantChannel.onmessage = function (ev) {
+      handleIncomingPacket(ev && ev.data);
+    };
+  }
+
+  window.addEventListener("storage", function (ev) {
+    if (ev.key === INSTANT_BUS_KEY && ev.newValue) {
+      try {
+        handleIncomingPacket(JSON.parse(ev.newValue));
+      } catch (e) {}
+    }
+  });
 })();
