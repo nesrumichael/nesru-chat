@@ -2029,4 +2029,234 @@ if (state.currentUser) {
   } else {
     mountFreeAiBuilderWidget();
   }
+})();// ============================================================================
+// DABALATA GAMA DUUBAA — OWN WEB SERVER STORE, CLOUD BRIDGE & SERVER MONITOR
+// Abbaa Weebsaayitii: Nesru Michael | nesrumichael@gmail.com | +251923502787
+// ============================================================================
+(function () {
+  const OWN_SERVER_KEY = "nesru_own_web_server_v1";
+  const SERVER_SYNC_CHANNEL = "nesru_own_web_server_channel_v1";
+
+  let serverBus = null;
+  try {
+    if ("BroadcastChannel" in window) {
+      serverBus = new BroadcastChannel(SERVER_SYNC_CHANNEL);
+    }
+  } catch (e) {
+    serverBus = null;
+  }
+
+  // Servera weebii mataa keetii (State + Snapshot) keessatti ol-kaa'uu
+  function writeToOwnServer() {
+    try {
+      const payload = {
+        server_owner: "Nesru Michael",
+        contact_email: "nesrumichael@gmail.com",
+        contact_phone: "+251923502787",
+        updated_at: new Date().toISOString(),
+        data: {
+          users: Array.isArray(state.users) ? state.users : [],
+          posts: Array.isArray(state.posts) ? state.posts : [],
+          stories: Array.isArray(state.stories) ? state.stories : [],
+          groups: Array.isArray(state.groups) ? state.groups : [],
+          messages: state.messages || {},
+          notifications: Array.isArray(state.notifications) ? state.notifications : []
+        }
+      };
+      localStorage.setItem(OWN_SERVER_KEY, JSON.stringify(payload));
+      if (serverBus) {
+        try {
+          serverBus.postMessage({ type: "SERVER_SNAPSHOT_UPDATED", payload: payload });
+        } catch (err) {}
+      }
+    } catch (e) {
+      console.warn("Own web server write note:", e);
+    }
+  }
+
+  // Jalqaba irratti servera weebii keetii irraa deebisuu (yoo jiraate)
+  function readFromOwnServer() {
+    try {
+      const raw = localStorage.getItem(OWN_SERVER_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!parsed || !parsed.data) return;
+
+      if (Array.isArray(parsed.data.users) && parsed.data.users.length > 0) {
+        state.users = parsed.data.users;
+      }
+      if (Array.isArray(parsed.data.posts) && parsed.data.posts.length > 0) {
+        state.posts = parsed.data.posts;
+      }
+      if (Array.isArray(parsed.data.stories) && parsed.data.stories.length > 0) {
+        state.stories = parsed.data.stories;
+      }
+      if (Array.isArray(parsed.data.groups) && parsed.data.groups.length > 0) {
+        state.groups = parsed.data.groups;
+      }
+      if (parsed.data.messages && typeof parsed.data.messages === "object") {
+        state.messages = parsed.data.messages;
+      }
+      if (Array.isArray(parsed.data.notifications)) {
+        state.notifications = parsed.data.notifications;
+      }
+    } catch (e) {
+      console.warn("Own web server read note:", e);
+    }
+  }
+
+  readFromOwnServer();
+
+  // saveState duraanii irratti servera mataa keetii wajjin wal-simsiisuu
+  const origSaveState = window.saveState;
+  window.saveState = function () {
+    if (typeof origSaveState === "function") {
+      origSaveState();
+    }
+    writeToOwnServer();
+  };
+
+  // Yoo Supabase (supabaseClient) hojjetu jiraate achi waliinis wal-quunnamsiisuu
+  async function pullLatestFromSupabaseIfConnected() {
+    if (typeof supabaseClient === "undefined" || !supabaseClient) return;
+    try {
+      const { data: sbPosts, error } = await supabaseClient
+        .from("posts")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(30);
+
+      if (!error && Array.isArray(sbPosts) && sbPosts.length > 0) {
+        sbPosts.forEach((row) => {
+          const exists = (state.posts || []).some((p) => String(p.id) === String(row.id));
+          if (!exists) {
+            state.posts.push({
+              id: row.id,
+              author_id: row.author_id || "sb-user",
+              author_name: "Cloud User",
+              author_avatar:
+                "https://ui-avatars.com/api/?name=Cloud+User&background=1877f2&color=fff&size=200",
+              verified: false,
+              content: row.content || "",
+              media_url: row.media_url || "",
+              media_type: row.media_type || "",
+              privacy: row.privacy || "public",
+              created_at: "Supabase Cloud",
+              likes: [],
+              shares: 0,
+              savedBy: [],
+              comments: []
+            });
+          }
+        });
+        writeToOwnServer();
+        if (typeof renderPosts === "function" && state.currentUser) {
+          renderPosts();
+        }
+      }
+    } catch (e) {}
+  }
+
+  // Tab/Window biroo irraa snapshot haaraa yoo dhufe
+  if (serverBus) {
+    serverBus.onmessage = function (ev) {
+      const msg = ev && ev.data;
+      if (!msg || msg.type !== "SERVER_SNAPSHOT_UPDATED" || !msg.payload || !msg.payload.data) return;
+      const d = msg.payload.data;
+      if (Array.isArray(d.posts)) state.posts = d.posts;
+      if (Array.isArray(d.stories)) state.stories = d.stories;
+      if (Array.isArray(d.users)) state.users = d.users;
+      if (d.messages) state.messages = d.messages;
+      if (Array.isArray(d.notifications)) state.notifications = d.notifications;
+      if (typeof origSaveState === "function") origSaveState();
+      if (state.currentUser) {
+        if (typeof renderPosts === "function") renderPosts();
+        if (typeof renderNotifications === "function") renderNotifications();
+      }
+    };
+  }
+
+  // Fuula irratti qabduu "🖥️ Web Server" dabaluun daataa servera keetii ilaaluu & backup gochuu
+  function mountServerConsoleButton() {
+    if (document.getElementById("own-server-btn")) return;
+
+    const btn = document.createElement("button");
+    btn.id = "own-server-btn";
+    btn.type = "button";
+    btn.textContent = "🖥️ Web Server";
+    btn.style.cssText =
+      "position:fixed;bottom:18px;right:18px;z-index:350;background:#1877f2;color:#fff;border:none;padding:10px 14px;border-radius:24px;font-weight:700;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,0.2);font-size:13px;";
+    btn.onclick = openServerMonitorModal;
+    document.body.appendChild(btn);
+
+    const modal = document.createElement("div");
+    modal.id = "own-server-modal";
+    modal.className = "modal-backdrop hidden";
+    modal.innerHTML = `
+      <div class="modal-box" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <h3>🖥️ Nesru Michael — Own Web Server Store</h3>
+          <button class="close-btn" onclick="document.getElementById('own-server-modal').classList.add('hidden')">✕</button>
+        </div>
+        <div class="modal-body" id="own-server-modal-body"></div>
+      </div>
+    `;
+    modal.onclick = function () {
+      modal.classList.add("hidden");
+    };
+    document.body.appendChild(modal);
+  }
+
+  function openServerMonitorModal() {
+    writeToOwnServer();
+    const modal = document.getElementById("own-server-modal");
+    const body = document.getElementById("own-server-modal-body");
+    if (!modal || !body) return;
+
+    const hasSupabase = typeof supabaseClient !== "undefined" && !!supabaseClient;
+    const rawServer = localStorage.getItem(OWN_SERVER_KEY) || "{}";
+
+    body.innerHTML = `
+      <p><strong>Server Status:</strong> ${hasSupabase ? "🟢 Connected to Supabase Cloud + Local Server Store" : "🟡 Local Web Server Store Active (Supabase Offline/Unlinked)"}</p>
+      <p><strong>Owner:</strong> Nesru Michael (nesrumichael@gmail.com | +251923502787)</p>
+      <ul style="margin:10px 0 12px 18px;">
+        <li>Users Saved: <strong>${(state.users || []).length}</strong></li>
+        <li>Posts Saved: <strong>${(state.posts || []).length}</strong></li>
+        <li>Stories Saved: <strong>${(state.stories || []).length}</strong></li>
+        <li>Groups Saved: <strong>${(state.groups || []).length}</strong></li>
+      </ul>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+        <button type="button" class="btn-primary" id="download-server-json-btn">⬇ Backup JSON Buufadhu</button>
+        <button type="button" class="btn-secondary" id="sync-supabase-now-btn">🔄 Cloud Waliin Wal-simsiisi</button>
+      </div>
+      <textarea rows="8" readonly style="width:100%;padding:8px;border:1px solid #dddfe2;border-radius:8px;font-family:monospace;font-size:11px;background:#f8f9fa;">${rawServer}</textarea>
+    `;
+
+    modal.classList.remove("hidden");
+
+    document.getElementById("download-server-json-btn").onclick = function () {
+      const blob = new Blob([rawServer], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "nesru-web-server-backup.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+
+    document.getElementById("sync-supabase-now-btn").onclick = async function () {
+      await pullLatestFromSupabaseIfConnected();
+      openServerMonitorModal();
+    };
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function () {
+      mountServerConsoleButton();
+      pullLatestFromSupabaseIfConnected();
+    });
+  } else {
+    mountServerConsoleButton();
+    pullLatestFromSupabaseIfConnected();
+  }
 })();
