@@ -1031,5 +1031,219 @@ if (state.currentUser) {
     renderEnhancedFriends();
   }
 })();
+  }// ============================================================================
+// DABALATA GAMA DUUBAA — FOLLOW / FOLLOW-BACK, PERSISTENT ACCOUNTS & ADMIN LIST
+// Abbaa Weebsaayitii: Nesru Michael | nesrumichael@gmail.com | +251923502787
+// ============================================================================
+(function () {
+  const OWNER_EMAIL = "nesrumichael@gmail.com";
+  const REGISTERED_USERS_KEY = "nesru_registered_accounts_v1";
+
+  function isSiteOwner(user) {
+    if (!user || !user.email) return false;
+    return user.email.trim().toLowerCase() === OWNER_EMAIL;
   }
+
+  // Account namoota galmaa'anii bakka addaatti ol-kaa'uu (akka hin haqamneef)
+  function loadPersistentAccounts() {
+    try {
+      const raw = localStorage.getItem(REGISTERED_USERS_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function savePersistentAccounts(usersArr) {
+    try {
+      localStorage.setItem(REGISTERED_USERS_KEY, JSON.stringify(usersArr));
+    } catch (e) {
+      console.warn("Persistent accounts save error:", e);
+    }
+  }
+
+  // Jalqaba irratti accounts ol-kaa'amanii fi state.users walitti makuu
+  const savedAccounts = loadPersistentAccounts();
+  if (Array.isArray(savedAccounts) && savedAccounts.length > 0) {
+    savedAccounts.forEach((acc) => {
+      if (!state.users.some((u) => u.id === acc.id || u.email.toLowerCase() === acc.email.toLowerCase())) {
+        state.users.push(acc);
+      }
+    });
+  }
+
+  // Array following fi followers nama hundaa irratti qopheessuu
+  function ensureFollowArrays() {
+    state.users.forEach((u) => {
+      if (!Array.isArray(u.following)) u.following = [];
+      if (!Array.isArray(u.followers)) u.followers = [];
+    });
+    if (state.currentUser) {
+      if (!Array.isArray(state.currentUser.following)) state.currentUser.following = [];
+      if (!Array.isArray(state.currentUser.followers)) state.currentUser.followers = [];
+    }
+  }
+
+  ensureFollowArrays();
+
+  // Yeroo account haaraan uumamu ykn seenamu accounticha akka hin badne ol-kaa'uu
+  function persistCurrentUsers() {
+    ensureFollowArrays();
+    savePersistentAccounts(state.users);
+    saveState();
+  }
+
+  const origSignup = window.handleSignup;
+  window.handleSignup = function (e) {
+    if (typeof origSignup === "function") origSignup(e);
+    persistCurrentUsers();
+    if (typeof renderFollowAndOwnerPanel === "function") renderFollowAndOwnerPanel();
+  };
+
+  const origLogin = window.handleLogin;
+  window.handleLogin = function (e) {
+    if (typeof origLogin === "function") origLogin(e);
+    persistCurrentUsers();
+    if (typeof renderFollowAndOwnerPanel === "function") renderFollowAndOwnerPanel();
+  };
+
+  // Follow ykn Follow-Back gochuu
+  window.followOrFollowBack = function (targetUserId) {
+    if (!state.currentUser) return;
+    ensureFollowArrays();
+
+    const me = state.users.find((u) => u.id === state.currentUser.id) || state.currentUser;
+    const target = state.users.find((u) => u.id === targetUserId);
+    if (!target || me.id === target.id) return;
+
+    const alreadyFollowing = me.following.includes(target.id);
+
+    if (alreadyFollowing) {
+      // Unfollow
+      me.following = me.following.filter((id) => id !== target.id);
+      target.followers = target.followers.filter((id) => id !== me.id);
+    } else {
+      // Follow / Follow Back
+      me.following.push(target.id);
+      if (!target.followers.includes(me.id)) {
+        target.followers.push(me.id);
+      }
+
+      // Beeksisa (Notification) nama follow godhameef erguu
+      if (Array.isArray(state.notifications)) {
+        const isFollowBack = Array.isArray(target.following) && target.following.includes(me.id);
+        state.notifications.unshift({
+          id: "n-follow-" + Date.now(),
+          text: isFollowBack
+            ? `${me.full_name} Follow-Back siif deebiseera!`
+            : `${me.full_name} si hordofuu jalqabeera (Followed you).`,
+          read: false
+        });
+      }
+    }
+
+    state.currentUser.following = me.following;
+    state.currentUser.followers = me.followers;
+    persistCurrentUsers();
+    renderFollowAndOwnerPanel();
+    if (typeof renderNotifications === "function") renderNotifications();
+  };
+
+  // Fuula Friends irratti Follow / Follow-Back fi Panelii Abbaa Weebsaayitii (Owner Only) mul'isuu
+  window.renderFollowAndOwnerPanel = function () {
+    const friendsContainer = document.getElementById("friends-list-container");
+    if (!friendsContainer || !state.currentUser) return;
+
+    ensureFollowArrays();
+    const me = state.users.find((u) => u.id === state.currentUser.id) || state.currentUser;
+    const others = state.users.filter((u) => u.id !== me.id);
+
+    const cardsHtml = others
+      .map((u) => {
+        const iFollowHim = me.following.includes(u.id);
+        const heFollowsMe = Array.isArray(u.following) && u.following.includes(me.id);
+
+        let btnLabel = "+ Follow";
+        let btnClass = "btn-primary";
+        if (iFollowHim) {
+          btnLabel = "✔ Following";
+          btnClass = "btn-secondary";
+        } else if (heFollowsMe) {
+          btnLabel = "↩ Follow Back";
+          btnClass = "btn-success";
+        }
+
+        return `
+          <div class="mini-card">
+            <strong>${u.full_name}</strong>
+            <p class="post-meta">@${u.username || "user"} • Followers: <strong>${(u.followers || []).length}</strong></p>
+            <p style="font-size:12px;margin:6px 0;">
+              ${heFollowsMe ? "🔔 Si hordofaa jira (Follows you)" : "Hawaasa keessaa"}
+            </p>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+              <button class="${btnClass}" onclick="followOrFollowBack('${u.id}')">${btnLabel}</button>
+              <button class="btn-secondary" onclick="openChatWith('${u.id}')">💬</button>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+
+    // Abbaan weebsaayitii (Nesru Michael) qofti bayyinaa fi listii namoota galmaa'anii ni arga
+    let ownerAdminSection = "";
+    if (isSiteOwner(state.currentUser)) {
+      const totalRegistered = state.users.length;
+      const rowsHtml = state.users
+        .map(
+          (usr, idx) => `
+          <tr>
+            <td style="padding:6px;border-bottom:1px solid #dddfe2;">${idx + 1}</td>
+            <td style="padding:6px;border-bottom:1px solid #dddfe2;"><strong>${usr.full_name}</strong></td>
+            <td style="padding:6px;border-bottom:1px solid #dddfe2;">@${usr.username || "-"}</td>
+            <td style="padding:6px;border-bottom:1px solid #dddfe2;">${usr.email || "-"}</td>
+            <td style="padding:6px;border-bottom:1px solid #dddfe2;">Following: ${(usr.following || []).length} | Followers: ${(usr.followers || []).length}</td>
+          </tr>
+        `
+        )
+        .join("");
+
+      ownerAdminSection = `
+        <div class="card" style="grid-column: 1 / -1; margin-top: 14px; border-left: 4px solid #1877f2;">
+          <h4>👑 Admin Panel — Abbaa Weebsaayitii Qofaaf (Nesru Michael)</h4>
+          <p style="margin:6px 0;font-size:14px;">
+            Bayyina Namoota Galmaa'anii Waliigalaa: <strong>${totalRegistered}</strong>
+          </p>
+          <div style="overflow-x:auto;margin-top:8px;">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+              <thead>
+                <tr style="background:#f0f2f5;text-align:left;">
+                  <th style="padding:6px;">#</th>
+                  <th style="padding:6px;">Maqaa Guutuu</th>
+                  <th style="padding:6px;">Username</th>
+                  <th style="padding:6px;">Email</th>
+                  <th style="padding:6px;">Follow Stats</th>
+                </tr>
+              </thead>
+              <tbody>${rowsHtml}</tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    friendsContainer.innerHTML = cardsHtml + ownerAdminSection;
+  };
+
+  const origInit = window.initApp;
+  window.initApp = function () {
+    if (typeof origInit === "function") origInit();
+    ensureFollowArrays();
+    renderFollowAndOwnerPanel();
+  };
+
+  if (state.currentUser) {
+    ensureFollowArrays();
+    renderFollowAndOwnerPanel();
+  }
+})();
 })();
