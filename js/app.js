@@ -1,5 +1,12 @@
 const OFFICIAL_SITE_URL = "https://nesrumichael.github.io/nesru-chat/";
 
+const SUPABASE_URL = "https://lcyouqcwcwmvbkxgengj.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxjeW91cWN3Y3dtdmJreGdlbmdqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU0NzI1NDQsImV4cCI6MjExMTA0ODU0NH0.eJHcCs2NPgItUnYBxRPBMFXquDQMBFHLUDkPkPzskA4";
+
+const sb = window.supabase
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
+
 const PROTECTED_FOUNDER = {
   id: "user-nesru-001",
   username: "nesrumichael",
@@ -192,6 +199,176 @@ function saveState() {
   } catch (e) {}
 }
 
+function isUuid(val) {
+  return typeof val === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
+}
+
+async function syncProfileToSupabase(userObj) {
+  if (!sb || !userObj || !isUuid(userObj.id)) return;
+  try {
+    await sb.from("profiles").upsert({
+      id: userObj.id,
+      username: userObj.username,
+      full_name: userObj.full_name,
+      country: userObj.country || "Ethiopia",
+      language: userObj.language || "om",
+      bio: userObj.bio || "",
+      role: userObj.role || "member"
+    });
+  } catch (e) {
+    console.warn("Profile sync warning:", e);
+  }
+}
+
+async function syncPostsFromSupabase() {
+  if (!sb) return;
+  try {
+    const { data, error } = await sb
+      .from("posts")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (error || !Array.isArray(data)) return;
+
+    const existingIds = new Set((state.posts || []).map(p => p.id));
+    let added = false;
+
+    data.forEach(row => {
+      if (!existingIds.has(row.id)) {
+        state.posts.push({
+          id: row.id,
+          author_id: row.author_id,
+          author_name: row.author_name || "Member",
+          author_avatar: row.author_avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(row.author_name || "U")}&background=1877f2&color=fff&size=200`,
+          isFounder: row.author_id === PROTECTED_FOUNDER.id,
+          content: row.content || "",
+          media_url: row.media_url || "",
+          media_type: row.media_type || "",
+          privacy: row.privacy || "public",
+          created_at: row.created_at ? new Date(row.created_at).toLocaleString() : "Just now",
+          likes: [],
+          shares: 0,
+          savedBy: [],
+          comments: []
+        });
+        existingIds.add(row.id);
+        added = true;
+      }
+    });
+
+    if (added) {
+      saveState();
+      renderPosts();
+    }
+  } catch (e) {
+    console.warn("Posts sync warning:", e);
+  }
+}
+
+async function syncMessagesFromSupabase() {
+  if (!sb || !state.currentUser || !isUuid(state.currentUser.id)) return;
+  try {
+    const uid = state.currentUser.id;
+    const { data, error } = await sb
+      .from("messages")
+      .select("*")
+      .or(`sender_id.eq.${uid},receiver_id.eq.${uid}`)
+      .order("created_at", { ascending: true })
+      .limit(100);
+
+    if (error || !Array.isArray(data)) return;
+
+    let updated = false;
+    data.forEach(row => {
+      const partnerId = row.sender_id === uid ? row.receiver_id : row.sender_id;
+      if (!partnerId) return;
+      if (!state.messages[partnerId]) state.messages[partnerId] = [];
+      const exists = state.messages[partnerId].some(m => m.id === row.id);
+      if (!exists) {
+        const dt = row.created_at ? new Date(row.created_at) : new Date();
+        const timeStr = dt.getHours().toString().padStart(2, "0") + ":" + dt.getMinutes().toString().padStart(2, "0");
+        state.messages[partnerId].push({
+          id: row.id,
+          from: row.sender_id,
+          text: row.content,
+          time: timeStr
+        });
+        updated = true;
+      }
+    });
+
+    if (updated) {
+      saveState();
+      const popup = document.getElementById("messenger-popup");
+      if (popup && !popup.classList.contains("hidden")) {
+        renderMessenger();
+      }
+    }
+  } catch (e) {
+    console.warn("Messages sync warning:", e);
+  }
+}
+
+function subscribeSupabaseRealtime() {
+  if (!sb) return;
+  try {
+    sb.channel("nesru-chat-live")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "posts" }, (payload) => {
+        const row = payload.new;
+        if (!row) return;
+        const exists = (state.posts || []).some(p => p.id === row.id);
+        if (!exists) {
+          state.posts.unshift({
+            id: row.id,
+            author_id: row.author_id,
+            author_name: row.author_name || "Member",
+            author_avatar: row.author_avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(row.author_name || "U")}&background=1877f2&color=fff&size=200`,
+            isFounder: row.author_id === PROTECTED_FOUNDER.id,
+            content: row.content || "",
+            media_url: row.media_url || "",
+            media_type: row.media_type || "",
+            privacy: row.privacy || "public",
+            created_at: row.created_at ? new Date(row.created_at).toLocaleString() : "Just now",
+            likes: [],
+            shares: 0,
+            savedBy: [],
+            comments: []
+          });
+          saveState();
+          renderPosts();
+        }
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
+        const row = payload.new;
+        if (!row || !state.currentUser) return;
+        const uid = state.currentUser.id;
+        if (row.sender_id !== uid && row.receiver_id !== uid) return;
+        const partnerId = row.sender_id === uid ? row.receiver_id : row.sender_id;
+        if (!state.messages[partnerId]) state.messages[partnerId] = [];
+        const exists = state.messages[partnerId].some(m => m.id === row.id);
+        if (!exists) {
+          const dt = row.created_at ? new Date(row.created_at) : new Date();
+          const timeStr = dt.getHours().toString().padStart(2, "0") + ":" + dt.getMinutes().toString().padStart(2, "0");
+          state.messages[partnerId].push({
+            id: row.id,
+            from: row.sender_id,
+            text: row.content,
+            time: timeStr
+          });
+          saveState();
+          const popup = document.getElementById("messenger-popup");
+          if (popup && !popup.classList.contains("hidden")) {
+            renderMessenger();
+          }
+        }
+      })
+      .subscribe();
+  } catch (e) {
+    console.warn("Realtime subscription warning:", e);
+  }
+}
+
 function populateLocaleSelects() {
   const langSelects = ["auth-lang-select", "app-lang-select", "signup-language", "set-language"];
   langSelects.forEach(id => {
@@ -286,7 +463,7 @@ function isImpersonatingFounder(identifier, fullName, email) {
   return false;
 }
 
-function handleLogin(e) {
+async function handleLogin(e) {
   e.preventDefault();
   clearAuthAlert();
 
@@ -296,6 +473,31 @@ function handleLogin(e) {
   if (isImpersonatingFounder(identifier, "", "")) {
     showAuthAlert(t("impersonationError", state.selectedLanguage));
     return;
+  }
+
+  if (sb && identifier.includes("@")) {
+    const { data, error } = await sb.auth.signInWithPassword({ email: identifier, password });
+    if (!error && data && data.user) {
+      const u = data.user;
+      const meta = u.user_metadata || {};
+      const loggedUser = {
+        id: u.id,
+        username: meta.username || identifier.split("@")[0],
+        full_name: meta.full_name || identifier.split("@")[0],
+        email: u.email,
+        country: state.selectedCountry || meta.country || "Ethiopia",
+        language: state.selectedLanguage || meta.language || "om",
+        role: "member",
+        avatar_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(meta.full_name || identifier)}&background=1877f2&color=fff&size=200`,
+        bio: meta.bio || "",
+        online: true
+      };
+      state.currentUser = loggedUser;
+      saveState();
+      await syncProfileToSupabase(loggedUser);
+      enterProtectedApp();
+      return;
+    }
   }
 
   const found = (state.registeredUsers || []).find(
@@ -320,7 +522,7 @@ function handleLogin(e) {
   enterProtectedApp();
 }
 
-function handleSignup(e) {
+async function handleSignup(e) {
   e.preventDefault();
   clearAuthAlert();
 
@@ -349,8 +551,22 @@ function handleSignup(e) {
     return;
   }
 
+  let createdUserId = "user-" + Date.now();
+  if (sb) {
+    const { data, error } = await sb.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { full_name: fullName, username, country, language }
+      }
+    });
+    if (!error && data && data.user) {
+      createdUserId = data.user.id;
+    }
+  }
+
   const newUser = {
-    id: "user-" + Date.now(),
+    id: createdUserId,
     username,
     full_name: fullName,
     email,
@@ -368,10 +584,14 @@ function handleSignup(e) {
   state.selectedCountry = country;
   state.selectedLanguage = language;
   saveState();
+  await syncProfileToSupabase(newUser);
   enterProtectedApp();
 }
 
-function handleLogout() {
+async function handleLogout() {
+  if (sb) {
+    try { await sb.auth.signOut(); } catch (e) {}
+  }
   if (state.currentUser) {
     const u = (state.registeredUsers || []).find(x => x.id === state.currentUser.id);
     if (u) u.online = false;
@@ -406,6 +626,10 @@ function enterProtectedApp() {
   renderFriends();
   renderGroups();
   renderMarketplace();
+
+  syncPostsFromSupabase();
+  syncMessagesFromSupabase();
+  subscribeSupabaseRealtime();
 }
 
 function updateUserLocaleUI() {
@@ -461,7 +685,7 @@ function populateSettingsForm() {
   if (msg) msg.textContent = "";
 }
 
-function saveAccountSettings() {
+async function saveAccountSettings() {
   if (!state.currentUser) return;
   const newName = document.getElementById("set-fullname").value.trim();
   const newBio = document.getElementById("set-bio").value.trim();
@@ -489,6 +713,7 @@ function saveAccountSettings() {
   }
 
   saveState();
+  await syncProfileToSupabase(state.currentUser);
   enterProtectedApp();
   const msg = document.getElementById("settings-save-msg");
   if (msg) msg.textContent = "✔ Saved!";
@@ -593,7 +818,7 @@ function toggleMediaInput() {
   document.getElementById("media-input-row").classList.toggle("hidden");
 }
 
-function createNewPost() {
+async function createNewPost() {
   if (!state.currentUser) return;
   const content = document.getElementById("post-content").value.trim();
   const mediaUrl = document.getElementById("post-media-url").value.trim();
@@ -603,8 +828,9 @@ function createNewPost() {
   if (!content && !mediaUrl) return;
 
   const u = state.currentUser;
-  state.posts.unshift({
-    id: "post-" + Date.now(),
+  const localId = "post-" + Date.now();
+  const newPost = {
+    id: localId,
     author_id: u.id,
     author_name: u.full_name,
     author_avatar: u.avatar_url,
@@ -618,13 +844,36 @@ function createNewPost() {
     shares: 0,
     savedBy: [],
     comments: []
-  });
+  };
 
+  state.posts.unshift(newPost);
   saveState();
   document.getElementById("post-content").value = "";
   document.getElementById("post-media-url").value = "";
   document.getElementById("media-input-row").classList.add("hidden");
   renderPosts();
+
+  if (sb && isUuid(u.id)) {
+    const { data, error } = await sb
+      .from("posts")
+      .insert({
+        author_id: u.id,
+        author_name: u.full_name,
+        author_avatar: u.avatar_url || "",
+        content,
+        media_url: mediaUrl,
+        media_type: mediaUrl ? mediaType : "",
+        privacy
+      })
+      .select()
+      .single();
+
+    if (!error && data && data.id) {
+      newPost.id = data.id;
+      saveState();
+      renderPosts();
+    }
+  }
 }
 
 function filterFeed(type, btn) {
@@ -759,12 +1008,16 @@ function toggleSavePost(postId) {
   renderPosts();
 }
 
-function deletePost(postId) {
+async function deletePost(postId) {
   const target = state.posts.find(p => p.id === postId);
   if (!target || target.author_id !== state.currentUser.id) return;
   state.posts = state.posts.filter(p => p.id !== postId);
   saveState();
   renderPosts();
+
+  if (sb && isUuid(postId)) {
+    try { await sb.from("posts").delete().eq("id", postId); } catch (e) {}
+  }
 }
 
 function renderProfileView() {
@@ -898,7 +1151,7 @@ function renderMessenger() {
   box.scrollTop = box.scrollHeight;
 }
 
-function sendDirectMessage(e) {
+async function sendDirectMessage(e) {
   e.preventDefault();
   const input = document.getElementById("chat-input");
   const text = input.value.trim();
@@ -907,10 +1160,28 @@ function sendDirectMessage(e) {
   if (!state.messages[pid]) state.messages[pid] = [];
   const now = new Date();
   const time = now.getHours().toString().padStart(2, "0") + ":" + now.getMinutes().toString().padStart(2, "0");
-  state.messages[pid].push({ from: state.currentUser.id, text, time });
+  const msgObj = { id: "msg-" + Date.now(), from: state.currentUser.id, text, time };
+  state.messages[pid].push(msgObj);
   saveState();
   input.value = "";
   renderMessenger();
+
+  if (sb && isUuid(state.currentUser.id) && isUuid(pid)) {
+    const { data, error } = await sb
+      .from("messages")
+      .insert({
+        sender_id: state.currentUser.id,
+        receiver_id: pid,
+        content: text
+      })
+      .select()
+      .single();
+
+    if (!error && data && data.id) {
+      msgObj.id = data.id;
+      saveState();
+    }
+  }
 }
 
 function renderNotifications() {
