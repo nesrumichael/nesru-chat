@@ -1751,4 +1751,282 @@ if (state.currentUser) {
       } catch (e) {}
     }
   });
+})();// ============================================================================
+// DABALATA GAMA DUUBAA — STRICT AUTHOR-ONLY DELETE, GLOBAL SYNC & FREE AI BUILDER
+// Abbaa Weebsaayitii: Nesru Michael | nesrumichael@gmail.com | +251923502787
+// ============================================================================
+(function () {
+  const GLOBAL_SYNC_CHANNEL = "nesru_global_world_sync_v1";
+  let globalChannel = null;
+  try {
+    if ("BroadcastChannel" in window) {
+      globalChannel = new BroadcastChannel(GLOBAL_SYNC_CHANNEL);
+    }
+  } catch (e) {
+    globalChannel = null;
+  }
+
+  // 1) MAX XANSA NAMA BIROO NAMNI TOKKOLLEEN AKKA HIN HAQNE (ABBAAN BARREESSE QOFA)
+  const origDeletePost = window.deletePost;
+  window.deletePost = function (postId) {
+    if (!state.currentUser) return;
+    const targetPost = (state.posts || []).find((p) => p.id === postId);
+    if (!targetPost) return;
+
+    // Nama postii sana mataa isaa barreesse qofatu haquu danda'a (abbaan/admin illee nama biroo hin haqu)
+    if (targetPost.author_id !== state.currentUser.id) {
+      alert(
+        "Dhorkaadha! Maxxansa nama biroo namni tokkolleen haquu hin danda'u — abbaa maxxansa sana barreesse qofatu haquu danda'a."
+      );
+      return;
+    }
+
+    if (typeof origDeletePost === "function") {
+      origDeletePost(postId);
+    }
+  };
+
+  // Fuula posts irratti qabduun haquu (🗑️) nama postii sana barreesse qofaaf akka mul'atu gochuu
+  const origRenderPosts = window.renderPosts;
+  window.renderPosts = function (searchQuery) {
+    if (typeof origRenderPosts === "function") {
+      origRenderPosts(searchQuery);
+    }
+    if (!state.currentUser) return;
+
+    const stream = document.getElementById("posts-stream");
+    if (!stream) return;
+
+    const cards = stream.querySelectorAll("article.card");
+    const visiblePosts = (state.posts || []).filter((p) => {
+      if (p.privacy === "only_me" && p.author_id !== state.currentUser.id) return false;
+      if (state.currentFilter === "public" && p.privacy !== "public") return false;
+      if (state.currentFilter === "friends" && p.privacy !== "friends") return false;
+      if (state.currentFilter === "mine" && p.author_id !== state.currentUser.id) return false;
+      if (searchQuery) {
+        return (
+          (p.content || "").toLowerCase().includes(searchQuery) ||
+          (p.author_name || "").toLowerCase().includes(searchQuery)
+        );
+      }
+      return true;
+    });
+
+    cards.forEach((card, idx) => {
+      const postObj = visiblePosts[idx];
+      const delBtn = card.querySelector('button[title="Haqi"]');
+      if (delBtn && postObj) {
+        if (postObj.author_id !== state.currentUser.id) {
+          delBtn.remove();
+        }
+      }
+    });
+  };
+
+  // 2) NAMOONNI ADDUNYAA GUUTUU ERGAAN WALII QOODUU (SUPABASE + LOCAL SYNC)
+  function syncPostToSupabase(post) {
+    if (typeof supabaseClient === "undefined" || !supabaseClient || !post) return;
+    supabaseClient
+      .from("posts")
+      .insert([
+        {
+          content: post.content || "",
+          media_url: post.media_url || "",
+          media_type: post.media_type || "",
+          privacy: "public"
+        }
+      ])
+      .then(function () {})
+      .catch(function () {});
+  }
+
+  function syncMessageToSupabase(senderName, receiverId, text) {
+    if (typeof supabaseClient === "undefined" || !supabaseClient) return;
+    supabaseClient
+      .from("messages")
+      .insert([
+        {
+          content: `[${senderName} -> ${receiverId}]: ${text}`
+        }
+      ])
+      .then(function () {})
+      .catch(function () {});
+  }
+
+  const origCreate = window.createNewPost;
+  window.createNewPost = function () {
+    const prevTopId = Array.isArray(state.posts) && state.posts[0] ? state.posts[0].id : null;
+    if (typeof origCreate === "function") origCreate();
+    const topPost = Array.isArray(state.posts) && state.posts[0] ? state.posts[0] : null;
+    if (topPost && topPost.id !== prevTopId) {
+      topPost.privacy = "public";
+      saveState();
+      syncPostToSupabase(topPost);
+      if (globalChannel) {
+        try {
+          globalChannel.postMessage({ type: "GLOBAL_POST", post: topPost });
+        } catch (e) {}
+      }
+    }
+  };
+
+  const origSendMsg = window.sendDirectMessage;
+  window.sendDirectMessage = function (e) {
+    const input = document.getElementById("chat-input");
+    const msgText = input ? input.value.trim() : "";
+    const receiverId = state.activeChatUserId;
+    const senderName = state.currentUser ? state.currentUser.full_name : "User";
+
+    if (typeof origSendMsg === "function") origSendMsg(e);
+
+    if (msgText && receiverId) {
+      syncMessageToSupabase(senderName, receiverId, msgText);
+      if (globalChannel) {
+        try {
+          globalChannel.postMessage({
+            type: "GLOBAL_DM",
+            senderName: senderName,
+            receiverId: receiverId,
+            text: msgText,
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+          });
+        } catch (err) {}
+      }
+    }
+  };
+
+  if (globalChannel) {
+    globalChannel.onmessage = function (ev) {
+      const data = ev && ev.data;
+      if (!data) return;
+
+      if (data.type === "GLOBAL_POST" && data.post) {
+        const exists = (state.posts || []).some((p) => p.id === data.post.id);
+        if (!exists) {
+          state.posts.unshift(data.post);
+          saveState();
+          if (typeof renderPosts === "function") renderPosts();
+        }
+      }
+
+      if (data.type === "GLOBAL_DM" && data.text) {
+        if (!state.messages) state.messages = {};
+        const bucket = data.receiverId || "user-nesru-001";
+        if (!Array.isArray(state.messages[bucket])) state.messages[bucket] = [];
+        state.messages[bucket].push({
+          from: "remote-user",
+          text: `${data.senderName}: ${data.text}`,
+          time: data.time || "Amma"
+        });
+        saveState();
+        const popup = document.getElementById("messenger-popup");
+        if (popup && !popup.classList.contains("hidden") && typeof renderMessenger === "function") {
+          renderMessenger();
+        }
+      }
+    };
+  }
+
+  // 3) FUULUMA WEEBSAAYITII IRRTTI AI BILISAA FAYYADAMAN FOYYESSUU / FEATURE DABALUUI
+  function mountFreeAiBuilderWidget() {
+    if (document.getElementById("free-ai-builder-btn")) return;
+
+    const btn = document.createElement("button");
+    btn.id = "free-ai-builder-btn";
+    btn.type = "button";
+    btn.textContent = "🤖 AI Bilisaa (Add Feature)";
+    btn.style.cssText =
+      "position:fixed;bottom:18px;left:18px;z-index:350;background:#10b981;color:#fff;border:none;padding:10px 14px;border-radius:24px;font-weight:700;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,0.2);font-size:13px;";
+    btn.onclick = openFreeAiModal;
+    document.body.appendChild(btn);
+
+    const modal = document.createElement("div");
+    modal.id = "free-ai-modal";
+    modal.className = "modal-backdrop hidden";
+    modal.innerHTML = `
+      <div class="modal-box" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <h3>🤖 AI Bilisaa — Feature Haaraa Dabali / Koodii Fooyyessi</h3>
+          <button class="close-btn" onclick="document.getElementById('free-ai-modal').classList.add('hidden')">✕</button>
+        </div>
+        <div class="modal-body">
+          <p style="font-size:13px;color:#65676b;margin-bottom:8px;">
+            Feature maaliif akka dabalamu ykn maal akka fooyya'u barreessi (Fkn: "Dark mode button dabali" ykn "Banner beeksisa afaan Oromoo gubbaa kaa'i"):
+          </p>
+          <textarea id="ai-prompt-input" rows="3" style="width:100%;padding:10px;border:1px solid #dddfe2;border-radius:8px;margin-bottom:10px;" placeholder="Maal akka siif uumu barbaadda?"></textarea>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+            <button type="button" class="btn-primary" id="ai-generate-btn">✨ Koodii AI Maddisiisi</button>
+            <button type="button" class="btn-success" id="ai-apply-btn">▶ Fuula Irratti Hojiirra Oolchi</button>
+            <button type="button" class="btn-secondary" id="ai-copy-btn">📋 Copy Koodii</button>
+          </div>
+          <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Koodii JavaScript Maddisiifame:</label>
+          <textarea id="ai-code-output" rows="8" style="width:100%;padding:10px;border:1px solid #dddfe2;border-radius:8px;font-family:monospace;font-size:12px;background:#f8f9fa;" placeholder="Koodiin asitti mul'ata..."></textarea>
+        </div>
+      </div>
+    `;
+    modal.onclick = function () {
+      modal.classList.add("hidden");
+    };
+    document.body.appendChild(modal);
+
+    document.getElementById("ai-generate-btn").onclick = async function () {
+      const promptText = document.getElementById("ai-prompt-input").value.trim();
+      const outBox = document.getElementById("ai-code-output");
+      if (!promptText) {
+        alert("Maaloo yaada / feature barbaaddu barreessi.");
+        return;
+      }
+      outBox.value = "AI bilisaa koodii qopheessaa jira... maaloo sekondii muraasa eegi.";
+
+      try {
+        const instruction =
+          "Write clean, safe vanilla JavaScript only (no markdown backticks) to implement this feature on a web page: " +
+          promptText;
+        const url = "https://text.pollinations.ai/" + encodeURIComponent(instruction);
+        const res = await fetch(url);
+        const codeText = await res.text();
+        outBox.value = codeText.replace(/```javascript|```js|```/g, "").trim();
+      } catch (err) {
+        // Offline / network fallback snippet
+        outBox.value =
+          "// AI offline fallback snippet\n(function() {\n  const note = document.createElement('div');\n  note.textContent = " +
+          JSON.stringify("✨ " + promptText) +
+          ";\n  note.style.cssText = 'position:fixed;bottom:64px;left:18px;background:#1877f2;color:#fff;padding:8px 14px;border-radius:10px;z-index:340;font-size:13px;';\n  document.body.appendChild(note);\n})();";
+      }
+    };
+
+    document.getElementById("ai-apply-btn").onclick = function () {
+      const codeToRun = document.getElementById("ai-code-output").value.trim();
+      if (!codeToRun) {
+        alert("Koodii hojiirra oolu hin jiru.");
+        return;
+      }
+      try {
+        const scriptEl = document.createElement("script");
+        scriptEl.textContent = codeToRun;
+        document.body.appendChild(scriptEl);
+        alert("Koodiin fuula kana irratti hojiirra ooleera! (Dhaabbataa gochuuf Copy godhii dhuma app.js irratti dabali)");
+      } catch (err) {
+        alert("Dogoggora koodii: " + err.message);
+      }
+    };
+
+    document.getElementById("ai-copy-btn").onclick = function () {
+      const outBox = document.getElementById("ai-code-output");
+      outBox.select();
+      document.execCommand("copy");
+      alert("Koodiin copy ta'eera! Dhuma app.js irratti paste gootee GitHub irratti ol-baasuu dandeessa.");
+    };
+  }
+
+  function openFreeAiModal() {
+    const m = document.getElementById("free-ai-modal");
+    if (m) m.classList.remove("hidden");
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", mountFreeAiBuilderWidget);
+  } else {
+    mountFreeAiBuilderWidget();
+  }
 })();
