@@ -834,7 +834,9 @@ if ("serviceWorker" in navigator) {
 // AUTO-BOOT IF LOGGED IN
 if (state.currentUser) {
   initApp();
-}// ============================================================================
+}
+
+// ============================================================================
 // DABALATA GAMA DUUBAA (APPENDED) — SIRNA DURAANII UTUU HIN MIIDHIN
 // ============================================================================
 (function () {
@@ -864,7 +866,11 @@ if (state.currentUser) {
         showOwnerButtonOnlyForFounder();
         tapCount = 0;
       }
-    });// ============================================================================
+    });
+  }
+})();
+
+// ============================================================================
 // DABALATA GAMA DUUBAA — ACCOUNT FEED, FOLLOW & 2,000 FRIEND LIMIT
 // Abbaa Appii: Nesru Michael | nesrumichael@gmail.com | +251923502787
 // ============================================================================
@@ -1031,7 +1037,8 @@ if (state.currentUser) {
     renderEnhancedFriends();
   }
 })();
-  }// ============================================================================
+
+// ============================================================================
 // DABALATA GAMA DUUBAA — FOLLOW / FOLLOW-BACK, PERSISTENT ACCOUNTS & ADMIN LIST
 // Abbaa Weebsaayitii: Nesru Michael | nesrumichael@gmail.com | +251923502787
 // ============================================================================
@@ -1244,7 +1251,10 @@ if (state.currentUser) {
   if (state.currentUser) {
     ensureFollowArrays();
     renderFollowAndOwnerPanel();
-  }// ============================================================================
+  }
+})();
+
+// ============================================================================
 // DABALATA GAMA DUUBAA — LIVE STORY UPLOAD & REALTIME-LIKE SYNC
 // Abbaa Weebsaayitii: Nesru Michael | nesrumichael@gmail.com | +251923502787
 // ============================================================================
@@ -1396,6 +1406,4 @@ if (state.currentUser) {
   if (state.currentUser) {
     renderEnhancedStoriesBar();
   }
-})();
-})();
 })();
