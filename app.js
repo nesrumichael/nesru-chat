@@ -9,8 +9,8 @@
  * 2) Live Supabase Cloud Mode (just paste SUPABASE_URL & SUPABASE_ANON_KEY below)
  */
 
-const SUPABASE_URL = ""; // Optional: Add your Supabase Project URL
-const SUPABASE_ANON_KEY = ""; // Optional: Add your Supabase Anon Public Key
+const SUPABASE_URL = "https://lcyouqcwcwmvbkxgengj.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxjeW91cWN3Y3dtdmJreGdlbmdqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU0NzI1NDQsImV4cCI6MjExMTA0ODU0NH0.eJHcCs2NPgItUnYBxRPBMFXquDQMBFHLUDkPkPzskA4";
 
 let supabaseClient = null;
 if (SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase) {
