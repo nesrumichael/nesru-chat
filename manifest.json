@@ -1,0 +1,22 @@
+{
+  "name": "Nesru m — Global Social Platform",
+  "short_name": "Nesru m",
+  "start_url": "/nesru-chat/",
+  "scope": "/nesru-chat/",
+  "display": "standalone",
+  "background_color": "#f0f2f5",
+  "theme_color": "#1877f2",
+  "description": "Nesru m Global Social Platform — Global Languages, All Countries, Secure Auth & Map.",
+  "icons": [
+    {
+      "src": "https://ui-avatars.com/api/?name=Nesru+m&background=1877f2&color=fff&size=192",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://ui-avatars.com/api/?name=Nesru+m&background=1877f2&color=fff&size=512",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

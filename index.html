@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="om">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nesru m — Global Social Platform &amp; Map Hub</title>
+  <meta name="description" content="Nesru m — Global Social Platform supporting world languages, all countries, strict login gate, anti-impersonation security, Settings, Terms, Transparency, Privacy, Support, Copyright &amp; Map." />
+  <meta name="author" content="Nesru m" />
+  <link rel="canonical" href="https://nesrumichael.github.io/nesru-chat/" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#1877f2" />
+  <link rel="stylesheet" href="css/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <section id="auth-screen" class="fb-auth-wrapper">
+    <div class="fb-auth-container">
+      <div class="fb-brand-col">
+        <div class="fb-logo-text">Nesru m</div>
+        <p id="landing-tagline" class="fb-tagline">
+          Connect with people across all countries and languages around the world.
+        </p>
+        <div class="fb-meta-box">
+          <div><strong>Website:</strong> https://nesrumichael.github.io/nesru-chat/</div>
+          <div><strong>Owner:</strong> Nesru m • nesrumichael@gmail.com • +251923502787</div>
+        </div>
+      </div>
+
+      <div class="fb-form-col">
+        <div class="auth-card">
+          <div class="locale-selectors">
+            <div class="locale-field">
+              <label for="auth-lang-select" id="lbl-lang">🌐 Language (Afaan):</label>
+              <select id="auth-lang-select" onchange="changeGlobalLanguage(this.value)"></select>
+            </div>
+            <div class="locale-field">
+              <label for="auth-country-select" id="lbl-country">🌍 Country (Biyya):</label>
+              <select id="auth-country-select" onchange="changeGlobalCountry(this.value)"></select>
+            </div>
+          </div>
+
+          <div class="auth-tabs">
+            <button id="tab-login" class="active" type="button" onclick="switchAuthTab('login')">Log In</button>
+            <button id="tab-signup" type="button" onclick="switchAuthTab('signup')">Create Account</button>
+          </div>
+
+          <div id="auth-alert" class="auth-alert hidden"></div>
+
+          <form id="login-form" onsubmit="handleLogin(event)">
+            <input type="text" id="login-identifier" placeholder="Email or Username" required />
+            <input type="password" id="login-password" placeholder="Password (min 6 characters)" required />
+            <button type="submit" id="btn-login-submit" class="btn-primary btn-full">Log In</button>
+          </form>
+
+          <form id="signup-form" class="hidden" onsubmit="handleSignup(event)">
+            <input type="text" id="signup-name" placeholder="Full Name" required />
+            <input type="text" id="signup-username" placeholder="Username (e.g. abebe_k)" required />
+            <input type="email" id="signup-email" placeholder="Email address" required />
+            <input type="password" id="signup-password" placeholder="Create Password (min 6 chars)" required />
+            <select id="signup-country" class="auth-select-full"></select>
+            <select id="signup-language" class="auth-select-full"></select>
+            <button type="submit" id="btn-signup-submit" class="btn-success btn-full">Sign Up</button>
+          </form>
+
+          <div class="security-note">
+            🛡️ <strong>Anti-Impersonation Protection:</strong> Founder identity (<strong>Nesru m</strong> / <code>nesrumichael@gmail.com</code>) is protected. Regular users cannot register or log in as the Founder.
+          </div>
+
+          <div class="auth-policy-links">
+            <button type="button" class="link-btn" onclick="openLegalModal('about')">About</button> •
+            <button type="button" class="link-btn" onclick="openLegalModal('privacy')">Privacy</button> •
+            <button type="button" class="link-btn" onclick="openLegalModal('terms')">Terms</button> •
+            <button type="button" class="link-btn" onclick="openLegalModal('transparency')">Transparency</button> •
+            <button type="button" class="link-btn" onclick="openLegalModal('support')">Support</button> •
+            <button type="button" class="link-btn" onclick="openLegalModal('copyright')">Copyright</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div id="app-shell" class="hidden">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="icon-btn mobile-only" type="button" onclick="toggleMobileMenu()">☰</button>
+        <div class="brand-badge" onclick="navigateTo('feed')">Nm</div>
+        <div class="search-box">
+          <input type="search" id="global-search" placeholder="Search Nesru m..." oninput="handleSearch(this.value)" />
+        </div>
+      </div>
+
+      <nav class="topbar-center">
+        <button class="nav-tab active" data-view="feed" type="button" onclick="navigateTo('feed')">🏠 Feed</button>
+        <button class="nav-tab" data-view="map" type="button" onclick="navigateTo('map')">🗺️ Map</button>
+        <button class="nav-tab" data-view="friends" type="button" onclick="navigateTo('friends')">👥 Friends</button>
+        <button class="nav-tab" data-view="groups" type="button" onclick="navigateTo('groups')">👪 Groups</button>
+        <button class="nav-tab" data-view="marketplace" type="button" onclick="navigateTo('marketplace')">🛍️ Market</button>
+      </nav>
+
+      <div class="topbar-right">
+        <select id="app-lang-select" class="mini-select" title="Language" onchange="changeGlobalLanguage(this.value)"></select>
+        <button class="icon-btn" type="button" onclick="toggleMessenger()" title="Messenger">💬</button>
+        <div class="notif-wrapper">
+          <button class="icon-btn" type="button" onclick="toggleNotifications()" title="Notifications">
+            🔔 <span id="notif-badge" class="badge">0</span>
+          </button>
+          <div id="notif-dropdown" class="dropdown-panel hidden">
+            <div class="dropdown-header">
+              <strong>Notifications</strong>
+              <button type="button" class="link-btn" onclick="markAllNotifsRead()">Mark all read</button>
+            </div>
+            <div id="notif-list"></div>
+          </div>
+        </div>
+
+        <div class="profile-chip" onclick="toggleProfileDropdown()">
+          <img id="nav-avatar" src="" alt="Profile" />
+          <span id="nav-username">User</span>
+        </div>
+
+        <div id="profile-dropdown" class="dropdown-panel hidden">
+          <div class="dropdown-profile-head">
+            <strong id="drop-fullname">User</strong>
+            <small id="drop-email">user@example.com</small>
+            <small id="drop-locale-info" class="muted"></small>
+            <span id="role-badge" class="pill">✔ Verified Member</span>
+          </div>
+          <button type="button" class="dropdown-item" onclick="navigateTo('profile')">👤 My Profile</button>
+          <button type="button" class="dropdown-item" onclick="navigateTo('settings')">⚙️ Settings</button>
+          <button type="button" class="dropdown-item" onclick="navigateTo('map')">🗺️ Google Map &amp; Location</button>
+          <button type="button" class="dropdown-item" onclick="openLegalModal('about')">ℹ️ About Us</button>
+          <button type="button" class="dropdown-item" onclick="openLegalModal('privacy')">🔒 Privacy Policy</button>
+          <button type="button" class="dropdown-item" onclick="openLegalModal('terms')">📜 Terms of Service</button>
+          <button type="button" class="dropdown-item" onclick="openLegalModal('transparency')">🔍 Transparency</button>
+          <button type="button" class="dropdown-item" onclick="openLegalModal('support')">📞 Contact Support</button>
+          <button type="button" class="dropdown-item" onclick="openLegalModal('copyright')">©️ Copyright Notice</button>
+          <hr />
+          <button type="button" class="dropdown-item danger" onclick="handleLogout()">🚪 Log Out</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="main-layout">
+      <aside id="left-sidebar" class="left-sidebar">
+        <div class="sidebar-user" onclick="navigateTo('profile')">
+          <img id="side-avatar" src="" alt="Avatar" />
+          <div>
+            <strong id="side-fullname">User</strong>
+            <div id="side-country-lang" class="post-meta"></div>
+          </div>
+        </div>
+        <ul class="sidebar-menu">
+          <li onclick="navigateTo('feed')">📰 News Feed</li>
+          <li onclick="navigateTo('map')">🗺️ Map &amp; Location</li>
+          <li onclick="navigateTo('friends')">🤝 Friends &amp; Follow</li>
+          <li onclick="navigateTo('groups')">👥 Groups</li>
+          <li onclick="navigateTo('marketplace')">🛒 Marketplace</li>
+          <li onclick="navigateTo('settings')">⚙️ Settings</li>
+          <li onclick="openLegalModal('about')">ℹ️ About</li>
+          <li onclick="openLegalModal('privacy')">🔒 Privacy</li>
+          <li onclick="openLegalModal('terms')">📜 Terms</li>
+          <li onclick="openLegalModal('transparency')">🔍 Transparency</li>
+          <li onclick="openLegalModal('support')">📞 Contact Support</li>
+          <li onclick="openLegalModal('copyright')">©️ Copyright</li>
+        </ul>
+        <div class="sidebar-footer-info">
+          <p><strong>Founder &amp; Owner:</strong> Nesru m</p>
+          <p><strong>Email:</strong> nesrumichael@gmail.com</p>
+          <p><strong>Tel:</strong> +251923502787</p>
+          <p><a href="https://nesrumichael.github.io/nesru-chat/" target="_blank" rel="noopener">nesrumichael.github.io/nesru-chat</a></p>
+          <p><strong>© 2026 Nesru m.</strong></p>
+        </div>
+      </aside>
+
+      <main class="center-content">
+        <section id="view-feed" class="view-section">
+          <div id="stories-bar" class="stories-bar"></div>
+
+          <div class="card composer-card">
+            <div class="composer-top">
+              <img id="composer-avatar" src="" alt="User" />
+              <textarea id="post-content" rows="2" placeholder="What's on your mind?"></textarea>
+            </div>
+            <div id="media-input-row" class="media-input-row hidden">
+              <input type="url" id="post-media-url" placeholder="Image or video URL (https://...)" />
+              <select id="post-media-type">
+                <option value="image">Image</option>
+                <option value="video">Video</option>
+              </select>
+            </div>
+            <div class="composer-actions">
+              <div class="composer-tools">
+                <button type="button" class="tool-btn" onclick="toggleMediaInput()">🖼️ Photo/Video</button>
+                <select id="post-privacy" class="privacy-select">
+                  <option value="public">🌍 Public</option>
+                  <option value="friends">👥 Friends</option>
+                  <option value="only_me">🔒 Only Me</option>
+                </select>
+              </div>
+              <button type="button" class="btn-primary" onclick="createNewPost()">Post</button>
+            </div>
+          </div>
+
+          <div class="feed-filters">
+            <button type="button" class="filter-chip active" onclick="filterFeed('all', this)">All</button>
+            <button type="button" class="filter-chip" onclick="filterFeed('public', this)">Public</button>
+            <button type="button" class="filter-chip" onclick="filterFeed('friends', this)">Friends</button>
+            <button type="button" class="filter-chip" onclick="filterFeed('mine', this)">Mine</button>
+          </div>
+
+          <div id="posts-stream"></div>
+        </section>
+
+        <section id="view-map" class="view-section hidden">
+          <div class="card">
+            <h2>🗺️ Google Map &amp; Location Hub — Nesru m</h2>
+            <p class="muted" style="margin:6px 0 12px;">
+              Search any country or city on Google Map, show your live GPS location, or open in Google Maps.
+            </p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+              <input type="text" id="map-query-input" value="Ethiopia" placeholder="Enter country or city" style="flex:1;min-width:200px;padding:9px 12px;border:1px solid #dddfe2;border-radius:8px;" />
+              <button type="button" class="btn-primary" onclick="updateEmbeddedMap()">🔍 View Map</button>
+              <button type="button" class="btn-success" onclick="locateMeOnMap()">📍 My Location</button>
+              <a id="external-gmaps-link" href="https://www.google.com/maps/search/?api=1&query=Ethiopia" target="_blank" rel="noopener" class="btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;">🌐 Open Google Maps</a>
+            </div>
+            <div id="map-status-line" style="font-size:13px;margin-bottom:10px;color:#1877f2;font-weight:600;">
+              Viewing: Ethiopia • Founder: Nesru m (nesrumichael@gmail.com | +251923502787)
+            </div>
+            <div style="border-radius:12px;overflow:hidden;border:1px solid #dddfe2;">
+              <iframe id="google-map-frame" title="Google Map View" width="100%" height="380" style="border:0;" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://maps.google.com/maps?q=Ethiopia&t=&z=6&ie=UTF8&iwloc=&output=embed"></iframe>
+            </div>
+          </div>
+        </section>
+
+        <section id="view-settings" class="view-section hidden">
+          <div class="card">
+            <h2>⚙️ Settings</h2>
+            <div class="settings-box">
+              <h3>1. Profile, Country &amp; Language</h3>
+              <label class="settings-label">Display Name:</label>
+              <input type="text" id="set-fullname" class="settings-input" />
+              <label class="settings-label">Bio:</label>
+              <input type="text" id="set-bio" class="settings-input" />
+              <label class="settings-label">Country (Biyya):</label>
+              <select id="set-country" class="settings-input"></select>
+              <label class="settings-label">Language (Afaan):</label>
+              <select id="set-language" class="settings-input"></select>
+              <label class="settings-label">Default Post Privacy:</label>
+              <select id="set-default-privacy" class="settings-input">
+                <option value="public">🌍 Public</option>
+                <option value="friends">👥 Friends</option>
+                <option value="only_me">🔒 Only Me</option>
+              </select>
+              <button type="button" class="btn-primary" onclick="saveAccountSettings()">💾 Save Settings</button>
+              <span id="settings-save-msg" style="margin-left:10px;font-size:13px;color:#15803d;font-weight:700;"></span>
+            </div>
+
+            <div class="settings-box">
+              <h3>2. Legal, Transparency, Support &amp; Copyright</h3>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+                <button type="button" class="btn-secondary" onclick="openLegalModal('about')">ℹ️ About</button>
+                <button type="button" class="btn-secondary" onclick="openLegalModal('privacy')">🔒 Privacy</button>
+                <button type="button" class="btn-secondary" onclick="openLegalModal('terms')">📜 Terms</button>
+                <button type="button" class="btn-secondary" onclick="openLegalModal('transparency')">🔍 Transparency</button>
+                <button type="button" class="btn-secondary" onclick="openLegalModal('support')">📞 Contact Support</button>
+                <button type="button" class="btn-secondary" onclick="openLegalModal('copyright')">©️ Copyright</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="view-profile" class="view-section hidden">
+          <div class="card profile-card">
+            <img id="prof-avatar" src="" alt="Avatar" class="profile-lg-avatar" />
+            <h2 id="prof-fullname">User</h2>
+            <p id="prof-bio"></p>
+            <p id="prof-locale" class="muted"></p>
+            <p id="prof-contact-line" class="muted"></p>
+            <button type="button" class="btn-secondary" onclick="navigateTo('settings')">⚙️ Edit Profile &amp; Settings</button>
+          </div>
+          <div id="profile-posts-stream"></div>
+        </section>
+
+        <section id="view-friends" class="view-section hidden">
+          <div class="card">
+            <h2>👥 Friends &amp; Follow</h2>
+            <div id="friends-list-container" class="grid-cards"></div>
+          </div>
+        </section>
+
+        <section id="view-groups" class="view-section hidden">
+          <div class="card">
+            <div class="section-head">
+              <h2>👪 Groups</h2>
+              <button type="button" class="btn-primary" onclick="createNewGroupPrompt()">+ Create Group</button>
+            </div>
+            <div id="groups-list-container" class="grid-cards"></div>
+          </div>
+        </section>
+
+        <section id="view-marketplace" class="view-section hidden">
+          <div class="card">
+            <div class="section-head">
+              <h2>🛒 Marketplace</h2>
+              <button type="button" class="btn-primary" onclick="addMarketItemPrompt()">+ Add Item</button>
+            </div>
+            <div id="market-container" class="grid-cards"></div>
+          </div>
+        </section>
+      </main>
+
+      <aside class="right-sidebar">
+        <div class="card">
+          <div class="section-head">
+            <h3>🟢 Contacts</h3>
+            <span id="online-count" class="pill">0</span>
+          </div>
+          <div id="online-contacts-list"></div>
+        </div>
+        <div class="card" style="font-size:12px;color:#65676b;">
+          <strong>© 2026 Nesru m</strong>
+          <p style="margin-top:4px;">Support: nesrumichael@gmail.com | +251923502787</p>
+        </div>
+      </aside>
+    </div>
+
+    <footer class="site-footer">
+      <div>
+        <strong>Nesru m</strong> — Official Website: <a href="https://nesrumichael.github.io/nesru-chat/" target="_blank" rel="noopener">https://nesrumichael.github.io/nesru-chat/</a>
+      </div>
+      <div class="footer-links">
+        <button type="button" class="link-btn" onclick="openLegalModal('about')">About</button> •
+        <button type="button" class="link-btn" onclick="navigateTo('settings')">Settings</button> •
+        <button type="button" class="link-btn" onclick="openLegalModal('terms')">Terms</button> •
+        <button type="button" class="link-btn" onclick="openLegalModal('transparency')">Transparency</button> •
+        <button type="button" class="link-btn" onclick="openLegalModal('privacy')">Privacy</button> •
+        <button type="button" class="link-btn" onclick="openLegalModal('support')">Contact Support</button> •
+        <button type="button" class="link-btn" onclick="openLegalModal('copyright')">Copyright</button>
+      </div>
+      <div style="font-size:12px;color:#65676b;">
+        © 2026 Nesru m. All rights reserved. Email: nesrumichael@gmail.com • Phone: +251923502787
+      </div>
+    </footer>
+  </div>
+
+  <div id="messenger-popup" class="messenger-popup hidden">
+    <div class="messenger-header">
+      <strong id="chat-partner-name">Messenger</strong>
+      <button type="button" class="close-btn" onclick="toggleMessenger()">✕</button>
+    </div>
+    <div id="chat-users-strip" class="chat-users-strip"></div>
+    <div id="chat-messages" class="chat-messages"></div>
+    <form class="chat-input-form" onsubmit="sendDirectMessage(event)">
+      <input type="text" id="chat-input" placeholder="Write a message..." required />
+      <button type="submit" class="btn-primary">Send</button>
+    </form>
+  </div>
+
+  <div id="story-modal" class="modal-backdrop hidden" onclick="closeStoryModal()">
+    <div class="modal-box" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <strong id="story-author">Story</strong>
+        <button type="button" class="close-btn" onclick="closeStoryModal()">✕</button>
+      </div>
+      <div id="story-display" class="story-modal-body"></div>
+    </div>
+  </div>
+
+  <div id="legal-modal" class="modal-backdrop hidden" onclick="closeLegalModal()">
+    <div class="modal-box" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3 id="legal-modal-title">Info</h3>
+        <button type="button" class="close-btn" onclick="closeLegalModal()">✕</button>
+      </div>
+      <div id="legal-modal-body" class="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
