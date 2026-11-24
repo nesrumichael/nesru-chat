@@ -1492,4 +1492,4 @@ if ("serviceWorker" in navigator) {
 populateLocaleSelects();
 if (state.currentUser) {
   enterProtectedApp();
-}
+   }
